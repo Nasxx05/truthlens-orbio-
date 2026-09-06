@@ -34,14 +34,16 @@ app = FastAPI(
 # The popup runs on a chrome-extension:// origin. Chrome allows the request on
 # the strength of the extension's host_permissions, but the middleware keeps
 # local development predictable across browsers and dev tools. The standalone
-# web app (served over http://localhost or http://127.0.0.1) is allowed too;
-# file:// pages send Origin: null and are deliberately not matched here, so
-# webapp/ must be served by a static HTTP server rather than opened directly.
+# web app (served over http://localhost, http://127.0.0.1, or deployed to
+# Vercel) is allowed too; file:// pages send Origin: null and are deliberately
+# not matched here, so webapp/ must be served by a static HTTP server rather
+# than opened directly.
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=(
         r"^(chrome-extension|moz-extension)://.*$"
         r"|^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+        r"|^https://([a-z0-9-]+\.)*vercel\.app$"
     ),
     allow_credentials=False,
     allow_methods=["POST", "GET", "OPTIONS"],

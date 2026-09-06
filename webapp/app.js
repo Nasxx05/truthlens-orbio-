@@ -11,7 +11,10 @@
  * in this file — same rule as the extension.
  */
 
-const API_BASE = "http://127.0.0.1:8000";
+// Points at wherever the backend is actually running. This is a Codespaces
+// forwarded-port URL, which is ephemeral — update this (and redeploy) if the
+// codespace restarts and the URL changes.
+const API_BASE = "https://fictional-meme-wq447j99p593959g-8000.app.github.dev";
 const STREAM_URL = `${API_BASE}/analyze/stream`;
 const ANALYZE_URL = `${API_BASE}/analyze`;
 
