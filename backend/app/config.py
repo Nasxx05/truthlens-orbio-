@@ -95,7 +95,7 @@ class Settings:
         default_factory=lambda: _float("VIDEO_RELEVANCE_THRESHOLD", 0.45)
     )
     video_timeout: float = field(default_factory=lambda: _float("VIDEO_TIMEOUT", 15.0))
-    tiktok_enabled: bool = field(default_factory=lambda: _bool("TIKTOK_ENABLED", True))
+    tiktok_enabled: bool = field(default_factory=lambda: _bool("TIKTOK_ENABLED", False))
 
     # --- Review filtering ---
     filter_enabled: bool = field(default_factory=lambda: _bool("FILTER_ENABLED", True))

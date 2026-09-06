@@ -28,6 +28,8 @@ const $ = (id) => document.getElementById(id);
 const ui = {
   badge: $("badge"),
   productName: $("product-name"),
+  productImage: $("product-image"),
+
   rail: $("rail"),
   main: $("main"),
 
@@ -39,6 +41,7 @@ const ui = {
   entryInput: $("entry-input"),
   entryError: $("entry-error"),
   recent: $("recent"),
+  recentClear: $("recent-clear"),
 
   stateError: $("state-error"),
   errorTitle: $("error-title"),
@@ -52,6 +55,8 @@ const ui = {
   summaryBody: $("summary-body"),
   summaryEmpty: $("summary-empty"),
   summaryConfidence: $("summary-confidence"),
+  trustScore: $("trust-score"),
+  starRating: $("star-rating"),
   verdict: $("verdict"),
   pros: $("pros"),
   cons: $("cons"),
@@ -133,6 +138,10 @@ function resetView() {
   show(ui.videosEmpty, false);
   show(ui.reviewsMore, false);
   show(ui.summaryConfidence, false);
+  show(ui.trustScore, false);
+  show(ui.starRating, false);
+  show(ui.productImage, false);
+  if (ui.productImage) ui.productImage.src = "";
   ui.reviewsCount.textContent = "";
   ui.videosCount.textContent = "";
   ui.footMeta.textContent = "";
@@ -185,6 +194,7 @@ function renderRecent() {
   const entries = loadRecent();
   ui.recent.replaceChildren();
   show(ui.recent, entries.length > 0);
+  show(ui.recentClear, entries.length > 0);
   for (const value of entries) {
     const chip = document.createElement("button");
     chip.type = "button";
@@ -197,6 +207,15 @@ function renderRecent() {
     });
     ui.recent.appendChild(chip);
   }
+}
+
+function clearRecent() {
+  try {
+    localStorage.removeItem(RECENT_KEY);
+  } catch {
+    /* localStorage unavailable — nothing to clear */
+  }
+  renderRecent();
 }
 
 /* ------------------------------------------------------------------ promo */
@@ -283,6 +302,21 @@ function renderSummary(summary, llm) {
   ui.summaryConfidence.textContent = `${level} confidence`;
   ui.summaryConfidence.className = `chip chip--${level}`;
   show(ui.summaryConfidence, true);
+
+  if (typeof summary.trust_score === "number") {
+    ui.trustScore.textContent = `${Math.round(summary.trust_score)}/100 trust`;
+    show(ui.trustScore, true);
+  } else {
+    show(ui.trustScore, false);
+  }
+
+  if (typeof summary.star_rating === "number") {
+    ui.starRating.textContent = stars(summary.star_rating) || `${summary.star_rating}/5`;
+    ui.starRating.title = `${summary.star_rating} out of 5`;
+    show(ui.starRating, true);
+  } else {
+    show(ui.starRating, false);
+  }
 
   bulletList(ui.pros, summary.pros);
   bulletList(ui.cons, summary.cons);
@@ -500,6 +534,10 @@ function applyEvent(event) {
         ui.reviewsCount.textContent = report.blocked
           ? `${report.source} blocked the scrape`
           : `${report.count} from ${report.source}…`;
+        if (report.image_url && ui.productImage) {
+          ui.productImage.src = report.image_url;
+          show(ui.productImage, true);
+        }
       }
       break;
     case "reviews":
@@ -591,6 +629,10 @@ async function runOnce(body, signal) {
   }
 
   const data = await response.json();
+  if (data.image_url && ui.productImage) {
+    ui.productImage.src = data.image_url;
+    show(ui.productImage, true);
+  }
   applyEvent({ event: "reviews", reviews: data.reviews, reviews_passed: data.reviews_passed,
                filter_report: data.filter_report, sources: data.sources });
   applyEvent({ event: "summary", summary: data.summary, llm: data.llm });
@@ -706,7 +748,13 @@ ui.debugToggle.addEventListener("click", () => {
   ui.debugToggle.textContent = showing ? "Hide details" : "Details";
 });
 
+ui.recentClear.addEventListener("click", clearRecent);
+
 /* ------------------------------------------------------------------- start */
+
+if (ui.productImage) {
+  ui.productImage.addEventListener("error", () => show(ui.productImage, false));
+}
 
 initPromo();
 renderRecent();

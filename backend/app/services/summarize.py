@@ -67,6 +67,10 @@ def _confidence_ceiling(review_count: int, source_count: int) -> str:
     Deliberately strict. A verdict that sounds certain is acted on, and a
     shopper cannot see how many reviews it rested on.
     """
+    if review_count == 0:
+        # No scraped reviews at all: whatever the verdict rests on (video
+        # commentary, general knowledge, or nothing), it is not review evidence.
+        return "none"
     if review_count < 5:
         return "low"
     if review_count < settings.llm_confident_min_reviews:
@@ -120,12 +124,17 @@ def _apply_caution(
         if not any(all(key in existing.lower() for key in keys) for existing in caveats):
             caveats.append(text)
 
-    if review_count < settings.llm_confident_min_reviews:
+    if review_count == 0:
+        add(
+            "No customer reviews were found for this product — this verdict draws on "
+            "video commentary and/or general knowledge instead, not verified reviews."
+        )
+    elif review_count < settings.llm_confident_min_reviews:
         add(
             f"Based on only {review_count} review(s) — too few to be confident this "
             "reflects most buyers' experience."
         )
-    if source_count < 2:
+    if review_count and source_count < 2:
         add(
             f"All reviews come from a single platform ({sources[0] if sources else 'unknown'}), "
             "so they share whatever moderation and incentives that platform has."
@@ -150,6 +159,24 @@ def _apply_caution(
             )
 
     summary.caveats = caveats
+
+    # Defensive normalization — never trust the model's raw numbers verbatim.
+    try:
+        clamped_score = max(0, min(100, round(float(summary.trust_score))))
+    except (TypeError, ValueError):
+        clamped_score = 50
+    if clamped_score != summary.trust_score:
+        adjustments.append(f"trust_score normalized to {clamped_score}")
+    summary.trust_score = clamped_score
+
+    try:
+        clamped_stars = max(0.0, min(5.0, round(float(summary.star_rating) * 2) / 2))
+    except (TypeError, ValueError):
+        clamped_stars = 2.5
+    if clamped_stars != summary.star_rating:
+        adjustments.append(f"star_rating normalized to {clamped_stars}")
+    summary.star_rating = clamped_stars
+
     return summary, adjustments
 
 
@@ -159,11 +186,16 @@ async def summarize_reviews(
     *,
     total_scraped: Optional[int] = None,
     provider_name: Optional[str] = None,
+    video_evidence: Optional[List[dict]] = None,
 ) -> SummaryBundle:
     """Summarize the reviews that passed filtering.
 
     ``reviews`` must already be filtered — this function does not re-filter,
     and passing everything would summarize the fakes along with the rest.
+
+    When ``reviews`` is empty, a verdict is still produced — grounded in
+    ``video_evidence`` and, failing that, the model's own general knowledge —
+    rather than returning nothing. See ``prompt.py``'s fallback prompt.
     """
     started = time.monotonic()
     total_scraped = len(reviews) if total_scraped is None else total_scraped
@@ -179,11 +211,6 @@ async def summarize_reviews(
 
     bundle.meta = SummaryResult(provider=provider.name, model=provider.model)
 
-    if not reviews:
-        bundle.meta.error = "no reviews survived filtering, so there is nothing to summarize"
-        bundle.meta.duration_ms = int((time.monotonic() - started) * 1000)
-        return bundle
-
     sources = sorted({str(review.get("source")) for review in reviews if review.get("source")})
     ratings = ratings_by_source(reviews)
 
@@ -194,6 +221,7 @@ async def summarize_reviews(
         total_scraped=total_scraped,
         filtered_out=filtered_out,
         ratings_by_source=ratings,
+        video_evidence=(video_evidence or []) if not reviews else [],
     )
 
     result = await provider.summarize(request)

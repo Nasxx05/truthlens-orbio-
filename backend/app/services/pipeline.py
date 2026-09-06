@@ -132,10 +132,12 @@ async def analyze_stream(
         finally:
             await queue.put(("sources_done", None))
 
-    async def pump_summary(surviving: List[dict], total: int) -> None:
+    async def pump_summary(surviving: List[dict], total: int, video_evidence: List[dict]) -> None:
         """Summarize, then put the result on the queue when it is ready."""
         try:
-            bundle = await summarize_reviews(product_name, surviving, total_scraped=total)
+            bundle = await summarize_reviews(
+                product_name, surviving, total_scraped=total, video_evidence=video_evidence
+            )
         except Exception as error:  # pragma: no cover - summarize guards itself
             logger.exception("summarization failed")
             bundle = SummaryBundle(meta=SummaryResult(provider="none", error=str(error)))
@@ -195,6 +197,8 @@ async def analyze_stream(
     summary_task = None
     summary_bundle = None
     sources_done = False
+    reviews_emitted = False
+    surviving: List[dict] = []
     failure: Optional[str] = None
 
     try:
@@ -209,7 +213,10 @@ async def analyze_stream(
 
             elif kind == "summary":
                 summary_bundle = payload
-                summary = {"pros": [], "cons": [], "verdict": "", "confidence": "none", "caveats": []}
+                summary = {
+                    "pros": [], "cons": [], "verdict": "", "confidence": "none", "caveats": [],
+                    "trust_score": None, "star_rating": None,
+                }
                 if summary_bundle.summary is not None:
                     summary = {
                         "pros": summary_bundle.summary.pros,
@@ -217,6 +224,8 @@ async def analyze_stream(
                         "verdict": summary_bundle.summary.verdict,
                         "confidence": summary_bundle.summary.confidence,
                         "caveats": summary_bundle.summary.caveats,
+                        "trust_score": summary_bundle.summary.trust_score,
+                        "star_rating": summary_bundle.summary.star_rating,
                     }
                 yield {
                     "event": "summary",
@@ -264,20 +273,44 @@ async def analyze_stream(
                         "videos": merged_videos([value]),
                     }
 
-            # Reviews are ready as soon as every review source has reported.
-            # Summarization starts here and runs alongside whatever video
-            # lookups are still outstanding.
-            if summary_task is None and seen_review_sources >= expected_review_sources:
+            # Reviews are ready as soon as every review source has reported —
+            # tell the frontend immediately either way, so "no reviews found"
+            # never looks like "still searching".
+            if not reviews_emitted and seen_review_sources >= expected_review_sources:
                 surviving = run_filter()
                 yield reviews_event()
-                summary_task = asyncio.create_task(pump_summary(surviving, len(reviews)))
+                reviews_emitted = True
+                if surviving:
+                    # Real review evidence: summarize now, in parallel with
+                    # whatever video lookups are still outstanding.
+                    summary_task = asyncio.create_task(pump_summary(surviving, len(reviews), []))
+                # else: nothing to summarize yet — wait for video collection to
+                # finish (below) so the fallback verdict has video evidence to
+                # draw on, instead of summarizing on reviews alone (=none).
 
-            # Every source failed or reported nothing: still filter and
-            # summarize rather than skipping the stages in silence.
+            # Every source has finished, including videos: if nothing started
+            # the summary above (no surviving reviews), fall back to whatever
+            # video evidence was found rather than skipping the stage in silence.
             if summary_task is None and sources_done:
-                surviving = run_filter()
-                yield reviews_event()
-                summary_task = asyncio.create_task(pump_summary(surviving, len(reviews)))
+                if not reviews_emitted:
+                    surviving = run_filter()
+                    yield reviews_event()
+                    reviews_emitted = True
+                else:
+                    surviving = []
+                video_evidence = [
+                    {
+                        "title": v.get("title"),
+                        "channel": v.get("channel"),
+                        "views": v.get("views"),
+                        "published": v.get("published"),
+                        "description": v.get("description"),
+                    }
+                    for v in merged_videos(video_results)[:6]
+                ]
+                summary_task = asyncio.create_task(
+                    pump_summary(surviving, len(reviews), video_evidence)
+                )
     finally:
         if not sources_task.done():
             sources_task.cancel()
@@ -310,6 +343,7 @@ async def analyze_stream(
         "video_sources": video_sources,
         "videos": merged_videos(video_results),
         "duration_ms": duration_ms,
+        "image_url": (host_report or {}).get("image_url"),
     }
 
 
@@ -332,6 +366,7 @@ async def analyze_once(**kwargs) -> Dict:
         "reviews_passed": 0,
         "llm": None,
         "message": None,
+        "image_url": None,
     }
 
     async for event in analyze_stream(**kwargs):
@@ -352,6 +387,7 @@ async def analyze_once(**kwargs) -> Dict:
             assembled["contributed"] = event["contributed"]
             assembled["video_sources"] = event["video_sources"]
             assembled["videos"] = event["videos"]
+            assembled["image_url"] = event.get("image_url")
         elif name == "error":
             assembled["status"] = "error"
             assembled["message"] = event.get("message")

@@ -181,6 +181,7 @@ async def find_videos(
 
             views = stats.get("viewCount")
             channel_id = snippet.get("channelId")
+            description = " ".join((snippet.get("description") or "").split())[:300] or None
             result.videos.append(
                 Video(
                     title=title,
@@ -194,6 +195,7 @@ async def find_videos(
                     thumbnail=((snippet.get("thumbnails") or {}).get("medium") or {}).get("url"),
                     relevance=relevance,
                     video_id=video_id,
+                    description=description,
                 )
             )
 

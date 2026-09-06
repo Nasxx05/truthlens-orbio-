@@ -449,6 +449,48 @@ def from_dom(html: str, source: str, page_url: Optional[str] = None) -> List[Rev
     return best
 
 
+def extract_product_image(html: str, page_url: str) -> Optional[str]:
+    """The product's main image, if the page advertises one.
+
+    Tried in order of trustworthiness: og:image/twitter:image (what the site
+    itself says represents the page), then schema.org Product.image from
+    JSON-LD. Best-effort — absence is not an error, just nothing to show.
+    """
+    soup = soup_of(html)
+
+    for selector in (
+        'meta[property="og:image"]',
+        'meta[property="og:image:url"]',
+        'meta[name="twitter:image"]',
+        'meta[name="twitter:image:src"]',
+    ):
+        node = soup.select_one(selector)
+        if node and node.get("content"):
+            return urljoin(page_url, node["content"].strip())
+
+    for block in soup.find_all("script", attrs={"type": re.compile("ld\\+json", re.I)}):
+        raw = block.string or block.get_text() or ""
+        if not raw.strip():
+            continue
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+
+        for node in _walk(parsed):
+            types = node.get("@type")
+            types = types if isinstance(types, list) else [types]
+            if not any(isinstance(t, str) and t.lower() == "product" for t in types):
+                continue
+            image = _first(node.get("image"))
+            if isinstance(image, dict):
+                image = image.get("url")
+            if isinstance(image, str) and image.strip():
+                return urljoin(page_url, image.strip())
+
+    return None
+
+
 def find_next_page(html: str, page_url: str) -> Optional[str]:
     """Next page of reviews, if the page advertises one."""
     soup = soup_of(html)

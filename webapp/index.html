@@ -15,6 +15,7 @@
           <p class="head__tagline">Paste a product link. Get a trust verdict from real reviews.</p>
           <p class="head__product" id="product-name" hidden></p>
         </div>
+        <img id="product-image" class="product-image" alt="Product" hidden />
         <span id="badge" class="badge badge--pending" hidden>detecting</span>
       </header>
 
@@ -37,7 +38,10 @@
           <button type="submit" class="btn">Analyze</button>
         </form>
         <p id="entry-error" class="error" hidden></p>
-        <div class="recent" id="recent" hidden></div>
+        <div class="recent__wrap">
+          <div class="recent" id="recent" hidden></div>
+          <button type="button" class="link" id="recent-clear" hidden>Clear history</button>
+        </div>
       </section>
 
       <!-- Progress rail: one dot per stage, filled as each arrives -->
@@ -65,6 +69,8 @@
         <section class="section" id="sec-summary" hidden>
           <div class="section__head">
             <h2>Verdict</h2>
+            <span class="chip chip--score" id="trust-score" hidden></span>
+            <span class="chip chip--stars" id="star-rating" hidden></span>
             <span class="chip" id="summary-confidence" hidden></span>
           </div>
 

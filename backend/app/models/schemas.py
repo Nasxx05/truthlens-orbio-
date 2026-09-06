@@ -94,6 +94,12 @@ class Summary(BaseModel):
         default_factory=list,
         description="Limitations of this summary — thin evidence, single platform, platform disagreement",
     )
+    trust_score: int = Field(
+        50, description="Overall trust score, 0-100. Always present, even with thin evidence."
+    )
+    star_rating: float = Field(
+        2.5, description="Shopper-facing star rating, 0-5 in 0.5 increments. Always present."
+    )
 
 
 class SourceReport(BaseModel):
@@ -114,6 +120,7 @@ class SourceReport(BaseModel):
     blocked: bool = Field(False, description="Bot protection or robots.txt stopped the scrape")
     notes: List[str] = Field(default_factory=list)
     duration_ms: Optional[int] = None
+    image_url: Optional[str] = Field(None, description="Product image scraped from the host page, if found")
 
 
 class VideoSourceReport(BaseModel):
@@ -234,4 +241,7 @@ class AnalyzeResponse(BaseModel):
     cached: Optional[CacheInfo] = Field(None, description="Cache provenance of this result")
     message: Optional[str] = Field(
         None, description="Human-readable explanation when status is not ok"
+    )
+    image_url: Optional[str] = Field(
+        None, description="Product image, scraped from the host page when available"
     )

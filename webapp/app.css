@@ -89,6 +89,16 @@ body {
 .mark { flex: 0 0 auto; margin-top: 2px; border-radius: 7px; }
 .head__text { flex: 1; min-width: 0; }
 
+.product-image {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
 h1 {
   margin: 0;
   font-size: 19px;
@@ -194,12 +204,21 @@ h1 {
 
 .error { margin: 7px 0 0; color: var(--err-fg); font-size: 12px; }
 
+.recent__wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .recent {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
 }
+
+#recent-clear { margin-top: 10px; }
 .recent__chip {
   padding: 3px 10px;
   background: var(--surface-2);
@@ -275,6 +294,8 @@ h1 {
 .chip--medium { background: var(--warn-bg);    color: var(--warn-fg); }
 .chip--low    { background: var(--pending-bg); color: var(--pending-fg); }
 .chip--none   { background: var(--pending-bg); color: var(--pending-fg); }
+.chip--score  { background: var(--surface-2);  color: var(--fg-soft); }
+.chip--stars  { background: var(--surface-2);  color: var(--fg-soft); }
 
 .empty { margin: 0; color: var(--muted); font-size: 12.5px; }
 

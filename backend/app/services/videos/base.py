@@ -19,6 +19,9 @@ class Video:
     thumbnail: Optional[str] = None
     relevance: Optional[float] = None         # title overlap with the product
     video_id: Optional[str] = None
+    # Short, truncated snippet — the only text evidence the LLM gets from a
+    # video when there are no scraped reviews to fall back on.
+    description: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -33,6 +36,7 @@ class Video:
             "thumbnail": self.thumbnail,
             "relevance": round(self.relevance, 3) if self.relevance is not None else None,
             "video_id": self.video_id,
+            "description": self.description,
         }
 
 

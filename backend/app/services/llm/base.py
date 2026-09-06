@@ -71,6 +71,24 @@ class SummaryOutput(BaseModel):
             "reviews concentrated in one time period."
         ),
     )
+    trust_score: int = Field(
+        50,
+        description=(
+            "Overall trust score for this product, 0-100. 0 means avoid, 100 means "
+            "excellent and trustworthy. Combine review sentiment and consistency, and — "
+            "when there are no reviews — video commentary and general product/brand "
+            "reputation. Always provide a number; when evidence is thin or absent, keep it "
+            "near the middle (40-60) to reflect genuine uncertainty rather than guessing an "
+            "extreme."
+        ),
+    )
+    star_rating: float = Field(
+        2.5,
+        description=(
+            "A shopper-facing star rating from 0 to 5, in increments of 0.5, consistent "
+            "with trust_score and the verdict. Always provide one, even with thin evidence."
+        ),
+    )
 
 
 @dataclass
@@ -89,6 +107,10 @@ class SummaryRequest:
     # Average rating per platform, used to tell the model when platforms
     # disagree — the cross-platform signal the project exists to surface.
     ratings_by_source: dict = field(default_factory=dict)
+    # Only populated when there are no reviews at all — the fallback evidence
+    # for a verdict based on video commentary instead. Each entry carries
+    # title/channel/views/published/description, no transcript.
+    video_evidence: List[dict] = field(default_factory=list)
 
 
 @dataclass

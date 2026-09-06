@@ -56,7 +56,19 @@ Rules:
    say plainly that it is not enough to be sure, and do not recommend or reject the
    product as though it were.
 7. Write for a shopper, not a marketer. No sales language, no exclamation marks, no
-   restating the product name back at them."""
+   restating the product name back at them.
+8. Always include trust_score and star_rating, consistent with the verdict and
+   confidence you give. When no reviews are supplied at all (see below), rule 1's
+   restriction to supplied reviews does not apply — that case has its own rules.
+9. Exception to rule 1, and only when you are told explicitly that no customer
+   reviews were found for this product: you may then base pros/cons/verdict on any
+   video commentary you are given, clearly attributed as coming from videos rather
+   than reviews; and, only if you genuinely recognize this specific product (or, failing
+   that, its brand/category) from your own training knowledge, you may add one brief,
+   clearly-labeled general-reputation opinion. If you have neither video evidence nor
+   real recognition of the product, say plainly that there is no evidence at all rather
+   than inventing anything — set confidence to 'none' and keep trust_score/star_rating
+   near the middle to reflect that uncertainty."""
 
 
 # How the evidence is described to the model, and what each tier licenses. The
@@ -188,11 +200,78 @@ def divergence_note(ratings_by_source: Dict[str, float]) -> str:
     return f"Average rating by platform: {listed}. The platforms broadly agree ({spread:.1f} stars apart)."
 
 
+def _format_video(index: int, video: dict) -> str:
+    """One video, as compact labelled text — the fallback prompt's equivalent of _format_review."""
+    bits = [f"[{index}]", "source=video"]
+    if video.get("channel"):
+        bits.append(f"channel={video['channel']}")
+    if video.get("views"):
+        bits.append(f"views={video['views']}")
+    if video.get("published"):
+        bits.append(f"published={video['published']}")
+
+    title = " ".join(str(video.get("title") or "").split())
+    description = " ".join(str(video.get("description") or "").split())
+    header = " ".join(bits)
+    body = f"{title}\n{description}" if description else title
+    return f"{header}\n{body}"
+
+
+def _build_fallback_prompt(request: SummaryRequest) -> Tuple[str, int]:
+    """The user message when there are no scraped reviews at all.
+
+    Distinct from :func:`build_user_prompt`'s reviews-grounded prompt: there is
+    nothing to select or cap here, and the model is explicitly told it may draw
+    on video commentary and, cautiously, its own general knowledge (rule 9 in
+    ``SYSTEM_PROMPT``) — the one case where that is licensed.
+    """
+    lines: List[str] = [
+        f"Product: {request.product_name or 'unknown product'}",
+        "",
+        "## Evidence",
+        "- No customer reviews were found for this product on any tracked platform.",
+    ]
+
+    videos = request.video_evidence or []
+    if videos:
+        lines.append(f"- {len(videos)} video(s) about this product were found; see below.")
+        lines += ["", "## Videos", ""]
+        for position, video in enumerate(videos, start=1):
+            lines.append(_format_video(position, video))
+            lines.append("")
+    else:
+        lines.append("- No review videos were found either.")
+
+    lines += [
+        "",
+        "## What this evidence supports",
+        (
+            "There are no scraped reviews. Follow rule 9: if video commentary is listed "
+            "above, base pros/cons/verdict on what those videos say, attributed to videos "
+            "not reviews. If you genuinely recognize this specific product or its brand, "
+            "you may add one brief general-reputation opinion, clearly labeled as such. If "
+            "you have neither, say plainly that there is no evidence at all. Either way, set "
+            "confidence to 'none' and give a trust_score/star_rating reflecting genuine "
+            "uncertainty rather than an extreme."
+        ),
+        "",
+        "---",
+        "",
+        "Give pros, cons, a verdict, confidence, caveats, trust_score and star_rating, "
+        "following the rules you were given.",
+    ]
+
+    return "\n".join(lines), 0
+
+
 def build_user_prompt(request: SummaryRequest) -> Tuple[str, int]:
     """The user message for a summarization request.
 
     Returns ``(prompt, reviews_included)``.
     """
+    if not request.reviews:
+        return _build_fallback_prompt(request)
+
     selected = _select(request.reviews, settings.llm_max_reviews)
     sources = sorted({str(review.get("source")) for review in selected if review.get("source")})
     tier, instruction = evidence_tier(len(selected), len(sources))
