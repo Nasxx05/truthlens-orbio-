@@ -1,0 +1,35 @@
+# TrustLens backend — Phase 2
+# Database, task queue, and LLM dependencies get added in the phases that
+# introduce them.
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+python-dotenv==1.0.1
+
+# --- Scraping ---
+httpx==0.28.1                # async HTTP with connection reuse
+beautifulsoup4==4.15.0       # HTML parsing
+lxml==6.1.3                  # faster parser backend for BeautifulSoup
+python-dateutil==2.9.0.post0 # review date parsing
+
+# Browser rendering for client-rendered review widgets. Optional: the scraper
+# stays on the HTTP path when it is absent. Needs a one-time browser download:
+#     python -m playwright install chromium
+playwright==1.60.0
+
+# --- LLM ---
+# Claude, via the official SDK's structured-output support. This is the
+# default provider.
+anthropic==0.125.0
+
+# OpenAI is an optional alternative provider. Uncomment to use it, and set
+# LLM_PROVIDER=openai plus OPENAI_API_KEY and OPENAI_MODEL.
+# openai
+
+# --- Cache and queue ---
+asyncpg==0.31.0              # PostgreSQL cache
+redis==7.0.1                 # task queue and shared rate limiting
+
+# Test double for Redis, so the queue can be exercised without a server.
+# fakeredis==2.37.1

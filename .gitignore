@@ -1,0 +1,29 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Secrets ---
+# Credentials live in backend environment variables only, never in the repo.
+.env
+.env.*
+!.env.example
+
+# --- Playwright ---
+# Browser binaries are large and machine-specific; install with
+# `python -m playwright install chromium`.
+ms-playwright/
+
+# --- Editors / OS ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# --- Local scratch ---
+*.log

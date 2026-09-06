@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TrustLens</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="head">
+      <img src="icons/icon32.png" alt="" class="mark" width="20" height="20" />
+      <div class="head__text">
+        <h1>TrustLens</h1>
+        <p class="head__product" id="product-name">Detecting product&hellip;</p>
+      </div>
+      <span id="badge" class="badge badge--pending">detecting</span>
+    </header>
+
+    <!-- Progress rail: one dot per stage, filled as each arrives -->
+    <div class="rail" id="rail" hidden>
+      <span class="rail__step" data-step="reviews"><i></i>reviews</span>
+      <span class="rail__step" data-step="summary"><i></i>verdict</span>
+      <span class="rail__step" data-step="videos"><i></i>videos</span>
+    </div>
+
+    <main id="main">
+      <!-- ERROR STATE -->
+      <section class="state state--error" id="state-error" hidden>
+        <h2 class="state__title" id="error-title">Something went wrong</h2>
+        <p class="state__body" id="error-body"></p>
+        <pre class="state__hint" id="error-hint" hidden></pre>
+      </section>
+
+      <!-- NOT ENOUGH DATA STATE -->
+      <section class="state state--thin" id="state-thin" hidden>
+        <h2 class="state__title">Not enough data for a verdict</h2>
+        <p class="state__body" id="thin-body"></p>
+      </section>
+
+      <!-- MANUAL ENTRY -->
+      <section class="card" id="manual" hidden>
+        <div class="card__label">Enter the product</div>
+        <p class="hint" id="manual-reason">
+          Couldn't detect a product on this page. Paste a product URL or type its name.
+        </p>
+        <form id="manual-form" class="row">
+          <input id="manual-input" class="input" type="text" placeholder="Product URL or name"
+                 autocomplete="off" spellcheck="false" />
+          <button type="submit" class="btn">Analyze</button>
+        </form>
+        <p id="manual-error" class="error" hidden></p>
+        <button id="rescan" type="button" class="link">Try detecting again</button>
+      </section>
+
+      <!-- VERDICT -->
+      <section class="section" id="sec-summary" hidden>
+        <div class="section__head">
+          <h2>Verdict</h2>
+          <span class="chip" id="summary-confidence" hidden></span>
+        </div>
+
+        <div class="skeleton" id="skel-summary">
+          <div class="sk sk--line" style="width: 96%"></div>
+          <div class="sk sk--line" style="width: 88%"></div>
+          <div class="sk sk--line" style="width: 64%"></div>
+          <div class="sk sk--pills"><span class="sk"></span><span class="sk"></span></div>
+        </div>
+
+        <div id="summary-body" hidden>
+          <p class="verdict" id="verdict"></p>
+          <div class="prosCons">
+            <div class="prosCons__col" id="pros-col">
+              <h3 class="prosCons__title prosCons__title--pro">Pros</h3>
+              <ul class="bullets" id="pros"></ul>
+            </div>
+            <div class="prosCons__col" id="cons-col">
+              <h3 class="prosCons__title prosCons__title--con">Cons</h3>
+              <ul class="bullets" id="cons"></ul>
+            </div>
+          </div>
+          <ul class="caveats" id="caveats" hidden></ul>
+        </div>
+        <p class="empty" id="summary-empty" hidden></p>
+      </section>
+
+      <!-- EVIDENCE -->
+      <section class="section" id="sec-reviews" hidden>
+        <div class="section__head">
+          <h2>Supporting reviews</h2>
+          <span class="count" id="reviews-count"></span>
+        </div>
+
+        <div class="skeleton" id="skel-reviews">
+          <div class="sk sk--card"></div>
+          <div class="sk sk--card"></div>
+        </div>
+
+        <ul class="reviews" id="reviews" hidden></ul>
+        <p class="empty" id="reviews-empty" hidden></p>
+        <button class="link" id="reviews-more" hidden>Show more reviews</button>
+      </section>
+
+      <!-- VIDEOS -->
+      <section class="section" id="sec-videos" hidden>
+        <div class="section__head">
+          <h2>Video reviews</h2>
+          <span class="count" id="videos-count"></span>
+        </div>
+
+        <div class="skeleton" id="skel-videos">
+          <div class="sk sk--row"></div>
+          <div class="sk sk--row"></div>
+        </div>
+
+        <ul class="videos" id="videos" hidden></ul>
+        <p class="empty" id="videos-empty" hidden></p>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <button id="retry" type="button" class="btn btn--ghost">Re-analyze</button>
+      <span class="foot__meta" id="foot-meta"></span>
+      <button id="debug-toggle" type="button" class="link link--quiet">Details</button>
+    </footer>
+
+    <section class="debug" id="debug" hidden>
+      <div class="card__label">Diagnostics</div>
+      <pre id="debug-body"></pre>
+    </section>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
