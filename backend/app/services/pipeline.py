@@ -19,7 +19,7 @@ import time
 from typing import AsyncIterator, Dict, List, Optional
 
 from app.config import settings
-from app.services.aggregate import collect_streaming, merged_videos
+from app.services.aggregate import collect_streaming, derive_name_from_url, merged_videos
 from app.services.nlp import filter_reviews
 from app.services.llm import SummaryResult
 from app.services.summarize import SummaryBundle, summarize_reviews
@@ -81,6 +81,14 @@ async def analyze_stream(
     rather than in a fixed sequence.
     """
     started = time.monotonic()
+
+    # A caller that only has a URL (the common case for a pasted link) sends
+    # no product_name — but a host site that blocks the scrape outright leaves
+    # nothing to search competitor sites or video platforms with. Falling
+    # back to a name guessed from the URL slug means a blocked host still
+    # produces output, instead of "not enough data" with nothing tried.
+    if not (product_name or "").strip():
+        product_name = derive_name_from_url(product_url)
 
     yield {
         "event": "started",

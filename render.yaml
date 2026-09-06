@@ -20,6 +20,8 @@ services:
         sync: false
       - key: OPENAI_MODEL
         sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
       - key: LOG_FORMAT
         value: json
       # Everything else (scrape budgets, filtering, rate limits, cache/queue)

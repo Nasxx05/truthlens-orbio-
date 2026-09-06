@@ -14,9 +14,11 @@ the architecture:
 
 import asyncio
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
+from urllib.parse import unquote, urlparse
 
 from app.config import settings
 from app.services.matching import MatchVerdict
@@ -57,6 +59,46 @@ class Collection:
     @property
     def review_sources(self) -> List[ScrapeResult]:
         return [r for r in (self.host, self.competitor) if r is not None]
+
+
+_URL_NAME_SKIP_SEGMENTS = {
+    "dp", "gp", "product", "products", "itm", "item", "site", "p", "ip", "pd",
+    "s", "aspx", "html", "htm", "www",
+}
+
+
+def derive_name_from_url(url: Optional[str]) -> Optional[str]:
+    """Best-effort product name guess from a URL path segment.
+
+    Fallback only: when a host site blocks scraping outright (a 404/403 before
+    any title is read), there is otherwise nothing to hand to competitor-site
+    or video search — and a shopper on a blocked site would get no output at
+    all. Most retail URLs embed the title in a slug (e.g.
+    ``/Anker-PowerCore-10000/dp/B0XXXXX``), which is a decent search phrase
+    even though it is not a scraped, verified name.
+    """
+    if not url:
+        return None
+    try:
+        path = urlparse(url).path
+    except ValueError:
+        return None
+
+    best = ""
+    for segment in path.split("/"):
+        segment = unquote(segment).strip()
+        if not segment or segment.lower() in _URL_NAME_SKIP_SEGMENTS:
+            continue
+        words = [w for w in re.split(r"[-_+]+", segment) if w and not w.isdigit()]
+        # A bare product/model id (B08N5WRWNW, SKU123) has no separators to
+        # split on and is not a usable search phrase.
+        if len(words) < 2:
+            continue
+        candidate = " ".join(words)
+        if len(candidate) > len(best):
+            best = candidate
+
+    return best or None
 
 
 async def _guard(label: str, coro, timeout: float, fallback):
