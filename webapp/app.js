@@ -11,10 +11,8 @@
  * in this file — same rule as the extension.
  */
 
-// Points at wherever the backend is actually running. This is a Codespaces
-// forwarded-port URL, which is ephemeral — update this (and redeploy) if the
-// codespace restarts and the URL changes.
-const API_BASE = "https://fictional-meme-wq447j99p593959g-8000.app.github.dev";
+// Points at the backend's stable Render URL.
+const API_BASE = "https://truthlens-orbio.onrender.com";
 const STREAM_URL = `${API_BASE}/analyze/stream`;
 const ANALYZE_URL = `${API_BASE}/analyze`;
 

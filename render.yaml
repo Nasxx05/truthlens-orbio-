@@ -7,8 +7,18 @@ services:
     plan: free
     healthCheckPath: /health
     envVars:
-      # Set this in the Render dashboard — never commit it.
+      # Set these in the Render dashboard — never commit secrets.
       - key: ANTHROPIC_API_KEY
+        sync: false
+      # Only needed if LLM_PROVIDER=openai — e.g. to reach an OpenAI-compatible
+      # proxy like OpenRouter with a proxy key instead of a genuine OpenAI key.
+      - key: LLM_PROVIDER
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        sync: false
+      - key: OPENAI_MODEL
         sync: false
       - key: LOG_FORMAT
         value: json

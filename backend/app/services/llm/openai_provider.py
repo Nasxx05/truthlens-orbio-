@@ -85,10 +85,16 @@ class OpenAIProvider(LLMProvider):
         user_prompt, used = build_user_prompt(request)
         result.reviews_used = used
 
-        client = openai.AsyncOpenAI(timeout=settings.llm_timeout)
+        client_kwargs = {"timeout": settings.llm_timeout}
+        if settings.openai_base_url:
+            client_kwargs["base_url"] = settings.openai_base_url
+        client = openai.AsyncOpenAI(**client_kwargs)
 
         try:
-            if hasattr(client, "responses"):
+            # The Responses API is OpenAI-proprietary; a proxy like OpenRouter
+            # only implements Chat Completions, so a custom base_url always
+            # takes the chat path even though client.responses still exists.
+            if not settings.openai_base_url and hasattr(client, "responses"):
                 result.summary, note = await self._via_responses(client, user_prompt)
             else:
                 result.summary, note = await self._via_chat(client, user_prompt)

@@ -23,9 +23,10 @@ playwright==1.60.0
 # default provider.
 anthropic==0.125.0
 
-# OpenAI is an optional alternative provider. Uncomment to use it, and set
+# OpenAI is an optional alternative provider — also used to reach any
+# OpenAI-compatible proxy (e.g. OpenRouter) via OPENAI_BASE_URL. Requires
 # LLM_PROVIDER=openai plus OPENAI_API_KEY and OPENAI_MODEL.
-# openai
+openai
 
 # --- Cache and queue ---
 asyncpg==0.31.0              # PostgreSQL cache

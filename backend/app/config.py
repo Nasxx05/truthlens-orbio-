@@ -120,6 +120,10 @@ class Settings:
     # id, and guessing one produces a confusing 404 at request time instead of
     # a clear "you have not chosen a model".
     openai_model: str = field(default_factory=lambda: (os.getenv("OPENAI_MODEL", "") or "").strip())
+    # Empty means OpenAI's own API. Set to an OpenAI-compatible proxy (e.g.
+    # https://openrouter.ai/api/v1) to route the "openai" provider through it
+    # instead — useful for a provider whose only credential is a proxy key.
+    openai_base_url: str = field(default_factory=lambda: (os.getenv("OPENAI_BASE_URL", "") or "").strip())
     # Reasoning depth. Unset means the API default (high). Lowering it is the
     # first cost lever worth pulling for a routine summarization workload.
     llm_effort: str = field(default_factory=lambda: (os.getenv("LLM_EFFORT", "") or "").strip().lower())
