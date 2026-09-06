@@ -60,11 +60,6 @@ class OpenAIProvider(LLMProvider):
         started = time.monotonic()
         result = SummaryResult(provider=self.name, model=self._model)
 
-        if not request.reviews:
-            result.error = "no reviews to summarize"
-            result.duration_ms = int((time.monotonic() - started) * 1000)
-            return result
-
         try:
             import openai
         except ImportError:

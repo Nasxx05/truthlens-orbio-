@@ -215,7 +215,7 @@ async def analyze_stream(
                 summary_bundle = payload
                 summary = {
                     "pros": [], "cons": [], "verdict": "", "confidence": "none", "caveats": [],
-                    "trust_score": None, "star_rating": None,
+                    "trust_score": 50, "star_rating": 2.5,
                 }
                 if summary_bundle.summary is not None:
                     summary = {
