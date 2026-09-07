@@ -125,18 +125,42 @@ _MEASUREMENT_TOKEN = re.compile(
 )
 
 
+# Product-line words after which a bare number is a generation/model number,
+# not an arbitrary quantity: "iPhone 13", "Pixel 8", "PS5" (already alnum),
+# "Galaxy S24" (already alnum) — this only covers names where the generation
+# is a plain digit with no letter of its own, so it never matches _MODEL_TOKEN.
+_GENERATION_WORD = {
+    "iphone", "ipad", "imac", "macbook", "watch", "airpods",
+    "pixel", "galaxy", "playstation", "ps", "xbox", "switch",
+    "surface", "note", "fold", "flip", "mark", "mk", "gt",
+}
+
+
 def model_tokens(title: str) -> List[str]:
     """Tokens that look like model identifiers.
 
     Compared with separators removed, since retailers disagree about them:
     "WH-1000XM5", "WH1000XM5" and "wh 1000xm5" are one product.
+
+    A bare number right after a recognized product-line word counts too — it
+    carries the same identifying weight as a mixed alnum model code, but a
+    review title stating just "iPhone 13" would otherwise never earn that
+    signal since "13" alone has no letters to match `_MODEL_TOKEN`.
     """
+    tokens = tokenize(title)
     found = []
-    for token in tokenize(title):
+    for index, token in enumerate(tokens):
         if _MEASUREMENT_TOKEN.match(token):
             continue
         if _MODEL_TOKEN.match(token):
             found.append(re.sub(r"[-/]", "", token.lower()))
+        elif (
+            token.isdigit()
+            and len(token) <= 3
+            and index > 0
+            and tokens[index - 1] in _GENERATION_WORD
+        ):
+            found.append(token)
     return found
 
 
