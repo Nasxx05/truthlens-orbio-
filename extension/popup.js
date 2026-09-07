@@ -49,6 +49,31 @@ const ui = {
   manualError: $("manual-error"),
   rescan: $("rescan"),
 
+  secHero: $("sec-hero"),
+  heroScore: $("hero-score"),
+  heroRec: $("hero-rec"),
+  heroStars: $("hero-stars"),
+  heroConfidence: $("hero-confidence"),
+  heroClaim: $("hero-claim"),
+
+  secBreakdown: $("sec-breakdown"),
+  breakdown: $("breakdown"),
+
+  secRisk: $("sec-risk"),
+  riskLevel: $("risk-level"),
+  riskSignals: $("risk-signals"),
+  riskEmpty: $("risk-empty"),
+  riskDisclaimer: $("risk-disclaimer"),
+
+  secThemes: $("sec-themes"),
+  themes: $("themes"),
+
+  secReasons: $("sec-reasons"),
+  reasonsBuyCol: $("reasons-buy-col"),
+  reasonsBuy: $("reasons-buy"),
+  reasonsTwiceCol: $("reasons-twice-col"),
+  reasonsTwice: $("reasons-twice"),
+
   secSummary: $("sec-summary"),
   summaryBody: $("summary-body"),
   summaryEmpty: $("summary-empty"),
@@ -80,6 +105,21 @@ const ui = {
   debugBody: $("debug-body"),
 };
 
+const RECOMMENDATION_LABEL = {
+  BUY_WITH_CONFIDENCE: "Buy with confidence",
+  BUY_WITH_CAUTION: "Buy with caution",
+  PROCEED_WITH_CAUTION: "Proceed with caution",
+  AVOID: "Consider avoiding",
+  INSUFFICIENT_DATA: "Not enough data",
+};
+const RECOMMENDATION_STYLE = {
+  BUY_WITH_CONFIDENCE: "buy",
+  BUY_WITH_CAUTION: "caution",
+  PROCEED_WITH_CAUTION: "caution",
+  AVOID: "avoid",
+  INSUFFICIENT_DATA: "unknown",
+};
+
 /** Everything received this run, for the diagnostics panel. */
 let diagnostics = {};
 let hiddenReviews = [];
@@ -109,7 +149,7 @@ function resetView() {
   hasPartialResults = false;
 
   show(ui.rail, true);
-  for (const step of ["reviews", "summary", "videos"]) setStep(step, "active");
+  for (const step of ["product", "reviews", "videos", "summary"]) setStep(step, "active");
 
   show(ui.stateError, false);
   show(ui.stateThin, false);
@@ -123,6 +163,23 @@ function resetView() {
     show(section, true);
     show(body, false);
   }
+
+  show(ui.secHero, false);
+  show(ui.secBreakdown, false);
+  show(ui.secRisk, false);
+  show(ui.secThemes, false);
+  show(ui.secReasons, false);
+  ui.breakdown.replaceChildren();
+  ui.riskSignals.replaceChildren();
+  ui.themes.replaceChildren();
+  ui.reasonsBuy.replaceChildren();
+  ui.reasonsTwice.replaceChildren();
+  ui.heroScore.textContent = "–";
+  ui.heroStars.textContent = "";
+  ui.heroConfidence.textContent = "";
+  show(ui.heroRec, false);
+  show(ui.heroClaim, false);
+  show(ui.riskEmpty, false);
 
   ui.pros.replaceChildren();
   ui.cons.replaceChildren();
@@ -148,6 +205,11 @@ function resetView() {
 /** Hide the analysis sections entirely — for detection failures. */
 function hideResults() {
   show(ui.rail, false);
+  show(ui.secHero, false);
+  show(ui.secBreakdown, false);
+  show(ui.secRisk, false);
+  show(ui.secThemes, false);
+  show(ui.secReasons, false);
   show(ui.secSummary, false);
   show(ui.secReviews, false);
   show(ui.secVideos, false);
@@ -252,8 +314,159 @@ function bulletList(target, items) {
   }
 }
 
+function renderHero(summary) {
+  const trustScore = summary && typeof summary.trust_score === "number" ? summary.trust_score : null;
+  ui.heroScore.textContent = trustScore === null ? "–" : `${Math.round(trustScore)}`;
+
+  const rec = summary && summary.recommendation;
+  if (rec && RECOMMENDATION_LABEL[rec]) {
+    ui.heroRec.textContent = RECOMMENDATION_LABEL[rec];
+    ui.heroRec.className = `badge hero__rec hero__rec--${RECOMMENDATION_STYLE[rec]}`;
+    show(ui.heroRec, true);
+  } else {
+    show(ui.heroRec, false);
+  }
+
+  ui.heroStars.textContent =
+    summary && typeof summary.star_rating === "number" ? stars(summary.star_rating) : "";
+
+  const level = summary && ["high", "medium", "low"].includes(summary.confidence)
+    ? summary.confidence
+    : "none";
+  ui.heroConfidence.textContent = level === "none" ? "" : `${level} confidence verdict`;
+
+  if (summary && summary.claim_check) {
+    ui.heroClaim.textContent = summary.claim_check;
+    show(ui.heroClaim, true);
+  } else {
+    show(ui.heroClaim, false);
+  }
+
+  show(ui.secHero, true);
+}
+
+function renderBreakdown(breakdown) {
+  const components = (breakdown && breakdown.components) || [];
+  if (!components.length) {
+    show(ui.secBreakdown, false);
+    return;
+  }
+
+  ui.breakdown.replaceChildren(
+    ...components.map((component) => {
+      const li = document.createElement("li");
+      li.className = "breakdown__row";
+
+      const label = document.createElement("span");
+      label.className = "breakdown__label";
+      label.textContent = component.label || component.key || "";
+
+      const track = document.createElement("div");
+      track.className = "breakdown__track";
+      const fill = document.createElement("div");
+      fill.className = "breakdown__fill";
+      const pct = typeof component.value === "number" ? Math.max(0, Math.min(100, component.value)) : 0;
+      fill.style.width = `${pct}%`;
+      track.appendChild(fill);
+
+      const value = document.createElement("span");
+      value.className = "breakdown__value";
+      value.textContent =
+        typeof component.value === "number"
+          ? `${Math.round(component.value)}/100`
+          : component.note || "Not enough data";
+
+      li.append(label, track, value);
+      return li;
+    })
+  );
+  show(ui.secBreakdown, true);
+}
+
+function renderRisk(risk) {
+  if (!risk) {
+    show(ui.secRisk, false);
+    return;
+  }
+
+  const level = ["low", "medium", "high"].includes(risk.level) ? risk.level : "insufficient_data";
+  ui.riskLevel.textContent = level === "insufficient_data" ? "not enough data" : `${level} risk`;
+  ui.riskLevel.className = `chip chip--risk-${level}`;
+  show(ui.riskLevel, true);
+
+  const signals = risk.signals || [];
+  bulletList(ui.riskSignals, signals.map((signal) => signal.detail || signal.label));
+  show(ui.riskSignals, signals.length > 0);
+
+  if (!signals.length) {
+    ui.riskEmpty.textContent =
+      level === "insufficient_data"
+        ? "Not enough review data to assess risk patterns."
+        : "No unusual patterns were detected in the available reviews.";
+    show(ui.riskEmpty, true);
+  } else {
+    show(ui.riskEmpty, false);
+  }
+
+  ui.riskDisclaimer.textContent =
+    risk.disclaimer ||
+    "Review Risk is an AI-generated assessment of observable patterns, not a definitive determination of review authenticity.";
+
+  show(ui.secRisk, true);
+}
+
+function renderThemes(themes) {
+  const list = themes || [];
+  if (!list.length) {
+    show(ui.secThemes, false);
+    return;
+  }
+
+  ui.themes.replaceChildren(
+    ...list.map((theme) => {
+      const li = document.createElement("li");
+      const sentiment = ["positive", "negative", "mixed"].includes(theme.sentiment)
+        ? theme.sentiment
+        : "mixed";
+      li.className = `theme theme--${sentiment}`;
+
+      const dot = document.createElement("span");
+      dot.className = "theme__dot";
+
+      const label = document.createElement("span");
+      label.textContent = theme.label || "";
+
+      li.append(dot, label);
+
+      if (typeof theme.mention_count === "number" && theme.mention_count > 0) {
+        const count = document.createElement("span");
+        count.className = "theme__count";
+        count.textContent = `×${theme.mention_count}`;
+        li.appendChild(count);
+      }
+
+      return li;
+    })
+  );
+  show(ui.secThemes, true);
+}
+
+function renderReasons(buy, thinkTwice) {
+  const buyList = buy || [];
+  const twiceList = thinkTwice || [];
+
+  bulletList(ui.reasonsBuy, buyList);
+  bulletList(ui.reasonsTwice, twiceList);
+  show(ui.reasonsBuyCol, buyList.length > 0);
+  show(ui.reasonsTwiceCol, twiceList.length > 0);
+  show(ui.secReasons, buyList.length > 0 || twiceList.length > 0);
+}
+
 function renderSummary(summary, llm) {
   setStep("summary", "done");
+
+  renderRisk(summary && summary.review_risk);
+  renderBreakdown(summary && summary.score_breakdown);
 
   const hasContent =
     summary && (summary.verdict || (summary.pros || []).length || (summary.cons || []).length);
@@ -265,8 +478,15 @@ function renderSummary(summary, llm) {
         ? `No verdict: ${llm.error}`
         : "No verdict could be produced from these reviews.";
     show(ui.summaryEmpty, true);
+    show(ui.secHero, false);
+    show(ui.secThemes, false);
+    show(ui.secReasons, false);
     return;
   }
+
+  renderHero(summary);
+  renderThemes(summary.themes);
+  renderReasons(summary.reasons_to_buy, summary.reasons_to_think_twice);
 
   ui.verdict.textContent = summary.verdict || "";
 
@@ -492,6 +712,7 @@ function applyEvent(event) {
   switch (event.event) {
     case "started":
       setBadge("analyzing", "pending");
+      setStep("product", "done");
       break;
     case "source":
       // Progress only — reviews themselves arrive once filtered.
@@ -598,6 +819,7 @@ async function runOnce(body, signal) {
   }
 
   const data = await response.json();
+  setStep("product", "done");
   if (data.image_url && ui.productImage) {
     ui.productImage.src = data.image_url;
     show(ui.productImage, true);

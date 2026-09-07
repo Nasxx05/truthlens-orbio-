@@ -207,7 +207,10 @@ class OpenAIProvider(LLMProvider):
             "exactly this shape: "
             '{"pros": [string], "cons": [string], "verdict": string, '
             '"confidence": "high"|"medium"|"low"|"none", "caveats": [string], '
-            '"trust_score": integer 0-100, "star_rating": number 0-5 in steps of 0.5}'
+            '"trust_score": integer 0-100, "star_rating": number 0-5 in steps of 0.5, '
+            '"themes": [{"label": string, "sentiment": "positive"|"negative"|"mixed", '
+            '"mention_count": integer}], "reasons_to_buy": [string], '
+            '"reasons_to_think_twice": [string], "claim_check": string or null}'
         )
         response = await client.chat.completions.create(
             model=model,

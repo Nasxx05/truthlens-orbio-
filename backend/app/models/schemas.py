@@ -100,6 +100,33 @@ class Summary(BaseModel):
     star_rating: float = Field(
         2.5, description="Shopper-facing star rating, 0-5 in 0.5 increments. Always present."
     )
+    recommendation: str = Field(
+        "INSUFFICIENT_DATA",
+        description=(
+            "Deterministic recommendation computed from trust_score, confidence and "
+            "review_risk: BUY_WITH_CONFIDENCE | BUY_WITH_CAUTION | PROCEED_WITH_CAUTION | "
+            "AVOID | INSUFFICIENT_DATA."
+        ),
+    )
+    themes: List[dict] = Field(
+        default_factory=list, description="Recurring topics across reviews: label/sentiment/mention_count"
+    )
+    reasons_to_buy: List[str] = Field(default_factory=list)
+    reasons_to_think_twice: List[str] = Field(default_factory=list)
+    claim_check: Optional[str] = Field(
+        None,
+        description="Cautious note on whether reviews support the scraped product description, if one was found",
+    )
+    review_risk: Optional[dict] = Field(
+        None,
+        description=(
+            "Deterministic, code-computed assessment of observable review-set patterns. "
+            "Never asserts a review is fake; always carries a disclaimer."
+        ),
+    )
+    score_breakdown: Optional[dict] = Field(
+        None, description="Weighted components explaining the trust score, or 'Not enough data'"
+    )
 
 
 class SourceReport(BaseModel):
@@ -121,6 +148,7 @@ class SourceReport(BaseModel):
     notes: List[str] = Field(default_factory=list)
     duration_ms: Optional[int] = None
     image_url: Optional[str] = Field(None, description="Product image scraped from the host page, if found")
+    description: Optional[str] = Field(None, description="Product description scraped from the host page, if found")
 
 
 class VideoSourceReport(BaseModel):
@@ -244,4 +272,7 @@ class AnalyzeResponse(BaseModel):
     )
     image_url: Optional[str] = Field(
         None, description="Product image, scraped from the host page when available"
+    )
+    description: Optional[str] = Field(
+        None, description="Product description, scraped from the host page when available"
     )

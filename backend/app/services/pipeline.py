@@ -136,7 +136,12 @@ async def analyze_stream(
         """Summarize, then put the result on the queue when it is ready."""
         try:
             bundle = await summarize_reviews(
-                product_name, surviving, total_scraped=total, video_evidence=video_evidence
+                product_name,
+                surviving,
+                total_scraped=total,
+                video_evidence=video_evidence,
+                filter_report=filter_report,
+                product_description=(host_report or {}).get("description"),
             )
         except Exception as error:  # pragma: no cover - summarize guards itself
             logger.exception("summarization failed")
@@ -216,6 +221,11 @@ async def analyze_stream(
                 summary = {
                     "pros": [], "cons": [], "verdict": "", "confidence": "none", "caveats": [],
                     "trust_score": 50, "star_rating": 2.5,
+                    "recommendation": summary_bundle.recommendation,
+                    "themes": [], "reasons_to_buy": [], "reasons_to_think_twice": [],
+                    "claim_check": None,
+                    "review_risk": summary_bundle.review_risk,
+                    "score_breakdown": summary_bundle.score_breakdown,
                 }
                 if summary_bundle.summary is not None:
                     summary = {
@@ -226,6 +236,13 @@ async def analyze_stream(
                         "caveats": summary_bundle.summary.caveats,
                         "trust_score": summary_bundle.summary.trust_score,
                         "star_rating": summary_bundle.summary.star_rating,
+                        "recommendation": summary_bundle.recommendation,
+                        "themes": [theme.model_dump() for theme in summary_bundle.summary.themes],
+                        "reasons_to_buy": summary_bundle.summary.reasons_to_buy,
+                        "reasons_to_think_twice": summary_bundle.summary.reasons_to_think_twice,
+                        "claim_check": summary_bundle.summary.claim_check,
+                        "review_risk": summary_bundle.review_risk,
+                        "score_breakdown": summary_bundle.score_breakdown,
                     }
                 yield {
                     "event": "summary",
@@ -344,6 +361,7 @@ async def analyze_stream(
         "videos": merged_videos(video_results),
         "duration_ms": duration_ms,
         "image_url": (host_report or {}).get("image_url"),
+        "description": (host_report or {}).get("description"),
     }
 
 
@@ -355,7 +373,12 @@ async def analyze_once(**kwargs) -> Dict:
     """
     assembled: Dict = {
         "status": "ok",
-        "summary": {"pros": [], "cons": [], "verdict": "", "confidence": "none", "caveats": []},
+        "summary": {
+            "pros": [], "cons": [], "verdict": "", "confidence": "none", "caveats": [],
+            "trust_score": 50, "star_rating": 2.5, "recommendation": "INSUFFICIENT_DATA",
+            "themes": [], "reasons_to_buy": [], "reasons_to_think_twice": [],
+            "claim_check": None, "review_risk": None, "score_breakdown": None,
+        },
         "reviews": [],
         "videos": [],
         "sources": [],
@@ -367,6 +390,7 @@ async def analyze_once(**kwargs) -> Dict:
         "llm": None,
         "message": None,
         "image_url": None,
+        "description": None,
     }
 
     async for event in analyze_stream(**kwargs):
@@ -388,6 +412,7 @@ async def analyze_once(**kwargs) -> Dict:
             assembled["video_sources"] = event["video_sources"]
             assembled["videos"] = event["videos"]
             assembled["image_url"] = event.get("image_url")
+            assembled["description"] = event.get("description")
         elif name == "error":
             assembled["status"] = "error"
             assembled["message"] = event.get("message")

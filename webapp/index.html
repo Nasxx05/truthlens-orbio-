@@ -44,11 +44,12 @@
         </div>
       </section>
 
-      <!-- Progress rail: one dot per stage, filled as each arrives -->
+      <!-- Investigation trail: one dot per real backend stage, filled as each arrives -->
       <div class="rail" id="rail" hidden>
-        <span class="rail__step" data-step="reviews"><i></i>reviews</span>
-        <span class="rail__step" data-step="summary"><i></i>verdict</span>
-        <span class="rail__step" data-step="videos"><i></i>videos</span>
+        <span class="rail__step" data-step="product"><i></i>Identifying product</span>
+        <span class="rail__step" data-step="reviews"><i></i>Collecting &amp; filtering reviews</span>
+        <span class="rail__step" data-step="videos"><i></i>Cross-checking video evidence</span>
+        <span class="rail__step" data-step="summary"><i></i>Analyzing risk &amp; generating verdict</span>
       </div>
 
       <main id="main">
@@ -63,6 +64,20 @@
         <section class="state state--thin" id="state-thin" hidden>
           <h2 class="state__title" id="thin-title">Still finishing up</h2>
           <p class="state__body" id="thin-body"></p>
+        </section>
+
+        <!-- HERO: trust score + recommendation, the centerpiece verdict -->
+        <section class="hero" id="sec-hero" hidden>
+          <div class="hero__score-wrap">
+            <div class="hero__score" id="hero-score">–</div>
+            <div class="hero__score-label">trust score</div>
+          </div>
+          <div class="hero__right">
+            <span class="badge hero__rec" id="hero-rec" hidden></span>
+            <div class="hero__stars" id="hero-stars"></div>
+            <div class="hero__confidence" id="hero-confidence"></div>
+            <p class="hero__claim" id="hero-claim" hidden></p>
+          </div>
         </section>
 
         <!-- VERDICT -->
@@ -89,6 +104,50 @@
             <ul class="caveats" id="caveats" hidden></ul>
           </div>
           <p class="empty" id="summary-empty" hidden></p>
+        </section>
+
+        <!-- SIGNAL BREAKDOWN -->
+        <section class="section" id="sec-breakdown" hidden>
+          <div class="section__head">
+            <h2>Why should I trust this verdict?</h2>
+          </div>
+          <ul class="breakdown" id="breakdown"></ul>
+        </section>
+
+        <!-- REVIEW RISK -->
+        <section class="section" id="sec-risk" hidden>
+          <div class="section__head">
+            <h2>Review risk</h2>
+            <span class="chip" id="risk-level" hidden></span>
+          </div>
+          <ul class="risk-signals" id="risk-signals"></ul>
+          <p class="empty" id="risk-empty" hidden></p>
+          <p class="risk-disclaimer" id="risk-disclaimer"></p>
+        </section>
+
+        <!-- THEMES -->
+        <section class="section" id="sec-themes" hidden>
+          <div class="section__head">
+            <h2>What real users are saying</h2>
+          </div>
+          <ul class="themes" id="themes"></ul>
+        </section>
+
+        <!-- REASONS TO BUY / THINK TWICE -->
+        <section class="section" id="sec-reasons" hidden>
+          <div class="section__head">
+            <h2>Top reasons</h2>
+          </div>
+          <div class="prosCons">
+            <div class="prosCons__col" id="reasons-buy-col">
+              <h3 class="prosCons__title prosCons__title--pro">Reasons to buy</h3>
+              <ul class="bullets" id="reasons-buy"></ul>
+            </div>
+            <div class="prosCons__col" id="reasons-twice-col">
+              <h3 class="prosCons__title prosCons__title--con">Reasons to think twice</h3>
+              <ul class="bullets" id="reasons-twice"></ul>
+            </div>
+          </div>
         </section>
 
         <!-- EVIDENCE -->

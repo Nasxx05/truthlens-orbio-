@@ -80,6 +80,7 @@ class ScrapeResult:
     notes: List[str] = field(default_factory=list)
     duration_ms: Optional[int] = None
     image_url: Optional[str] = None  # product image, scraped from the host page
+    description: Optional[str] = None  # product description, scraped from the host page
 
     def add(self, reviews: List[Review], strategy: str, limit: int) -> int:
         """Merge in newly found reviews, deduplicated and capped.
@@ -122,6 +123,7 @@ class ScrapeResult:
             "notes": self.notes,
             "duration_ms": self.duration_ms,
             "image_url": self.image_url,
+            "description": self.description,
         }
 
 

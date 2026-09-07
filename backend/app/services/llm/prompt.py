@@ -60,6 +60,18 @@ Rules:
 8. Always include trust_score and star_rating, consistent with the verdict and
    confidence you give. When no reviews are supplied at all (see below), rule 1's
    restriction to supplied reviews does not apply — that case has its own rules.
+8a. themes: list recurring topics reviewers raise (e.g. "battery life"), each with a
+    sentiment and roughly how many reviews mention it. Only include a topic that
+    actually recurs — do not invent one from a single reviewer.
+8b. reasons_to_buy / reasons_to_think_twice: short phrases drawn from the same
+    evidence as pros/cons — not a new invention pass, and not marketing language.
+8c. If, and only if, a "## Product description" section is supplied below, set
+    claim_check to one short, cautious sentence on whether the review evidence you
+    were given generally supports, contradicts, or simply doesn't address that
+    description. Never assert certainty, and never call anything "fake" — describe
+    a gap as "reviews don't mention X" or "some reviewers report Y, which differs
+    from the listed description," not as a lie or deception. When no product
+    description is supplied, leave claim_check null — do not guess one.
 9. Exception to rule 1, and only when you are told explicitly that no customer
    reviews were found for this product: base pros/cons/verdict on any video commentary
    you are given, clearly attributed as coming from videos rather than reviews. Then, if
@@ -250,6 +262,16 @@ def _build_fallback_prompt(request: SummaryRequest) -> Tuple[str, int]:
     else:
         lines.append("- No review videos were found either.")
 
+    if request.product_description:
+        lines += [
+            "",
+            "## Product description",
+            request.product_description.strip(),
+            "",
+            "Per rule 8c, set claim_check to a cautious sentence on whether the evidence "
+            "above generally supports, contradicts, or doesn't address this description.",
+        ]
+
     lines += [
         "",
         "## What this evidence supports",
@@ -317,6 +339,19 @@ def build_user_prompt(request: SummaryRequest) -> Tuple[str, int]:
         "",
         f"## What this evidence supports",
         instruction,
+    ]
+
+    if request.product_description:
+        lines += [
+            "",
+            "## Product description",
+            request.product_description.strip(),
+            "",
+            "Per rule 8c, set claim_check to a cautious sentence on whether the review "
+            "evidence generally supports, contradicts, or doesn't address this description.",
+        ]
+
+    lines += [
         "",
         "## Reviews",
         "",

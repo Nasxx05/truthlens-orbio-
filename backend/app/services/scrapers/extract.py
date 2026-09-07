@@ -491,6 +491,49 @@ def extract_product_image(html: str, page_url: str) -> Optional[str]:
     return None
 
 
+def extract_product_description(html: str, page_url: str) -> Optional[str]:
+    """The product's own description, if the page advertises one.
+
+    Mirrors :func:`extract_product_image`'s trust ordering: og:description /
+    twitter:description first, then schema.org Product.description from
+    JSON-LD. Best-effort — used only to give the LLM something to check
+    review evidence against (``claim_check``); absence means that field is
+    simply omitted, never guessed.
+    """
+    soup = soup_of(html)
+
+    for selector in (
+        'meta[property="og:description"]',
+        'meta[name="twitter:description"]',
+        'meta[name="description"]',
+    ):
+        node = soup.select_one(selector)
+        if node and node.get("content"):
+            text = " ".join(node["content"].split())
+            if text:
+                return text[:500]
+
+    for block in soup.find_all("script", attrs={"type": re.compile("ld\\+json", re.I)}):
+        raw = block.string or block.get_text() or ""
+        if not raw.strip():
+            continue
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+
+        for node in _walk(parsed):
+            types = node.get("@type")
+            types = types if isinstance(types, list) else [types]
+            if not any(isinstance(t, str) and t.lower() == "product" for t in types):
+                continue
+            description = node.get("description")
+            if isinstance(description, str) and description.strip():
+                return " ".join(description.split())[:500]
+
+    return None
+
+
 def find_next_page(html: str, page_url: str) -> Optional[str]:
     """Next page of reviews, if the page advertises one."""
     soup = soup_of(html)

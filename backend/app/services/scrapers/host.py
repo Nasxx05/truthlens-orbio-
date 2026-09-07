@@ -19,7 +19,12 @@ from urllib.parse import urlparse
 from app.config import settings
 from app.services.scrapers import browser
 from app.services.scrapers.base import Review, ScrapeResult
-from app.services.scrapers.extract import extract_product_image, from_dom, from_structured_data
+from app.services.scrapers.extract import (
+    extract_product_description,
+    extract_product_image,
+    from_dom,
+    from_structured_data,
+)
 from app.services.scrapers.fetch import Fetcher
 from app.services.scrapers.sites import adapter_for
 
@@ -133,6 +138,12 @@ async def scrape_host_reviews(
                         result.image_url = extract_product_image(page.html, page.url)
                     except Exception as error:
                         logger.debug("product image extraction failed on %s: %s", page.url, error)
+
+                if result.description is None:
+                    try:
+                        result.description = extract_product_description(page.html, page.url)
+                    except Exception as error:
+                        logger.debug("product description extraction failed on %s: %s", page.url, error)
 
                 reviews, strategy = _extract(page.html, source, page.url)
                 added = result.add(reviews, strategy, limit)

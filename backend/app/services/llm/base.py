@@ -89,6 +89,52 @@ class SummaryOutput(BaseModel):
             "with trust_score and the verdict. Always provide one, even with thin evidence."
         ),
     )
+    themes: List["ThemeOutput"] = Field(
+        default_factory=list,
+        description=(
+            "Recurring topics reviewers actually raise, e.g. 'battery life', 'customer "
+            "support'. Only include a topic that comes up across multiple reviews — this "
+            "is a pattern summary, not a single reviewer's opinion restated."
+        ),
+    )
+    reasons_to_buy: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Short, grounded reasons a shopper might buy this, drawn from the same "
+            "evidence as pros — not marketing language."
+        ),
+    )
+    reasons_to_think_twice: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Short, grounded reasons a shopper might hesitate, drawn from the same "
+            "evidence as cons."
+        ),
+    )
+    claim_check: Optional[str] = Field(
+        None,
+        description=(
+            "Only fill this in when a product description was supplied. One cautious "
+            "sentence on whether review evidence generally supports, contradicts, or "
+            "doesn't address that description. Never claim certainty; leave this null "
+            "when no description was given rather than guessing."
+        ),
+    )
+
+
+class ThemeOutput(BaseModel):
+    """One recurring topic across the reviews."""
+
+    label: str = Field(..., description="Short topic name, e.g. 'battery life'")
+    sentiment: str = Field(
+        "mixed", description="How reviewers feel about this topic: positive | negative | mixed"
+    )
+    mention_count: int = Field(
+        0, description="Roughly how many of the supplied reviews raised this topic"
+    )
+
+
+SummaryOutput.model_rebuild()
 
 
 @dataclass
@@ -111,6 +157,9 @@ class SummaryRequest:
     # for a verdict based on video commentary instead. Each entry carries
     # title/channel/views/published/description, no transcript.
     video_evidence: List[dict] = field(default_factory=list)
+    # Best-effort meta description scraped from the product page, if any. Used
+    # only for the optional claim_check field — never fabricated when absent.
+    product_description: Optional[str] = None
 
 
 @dataclass

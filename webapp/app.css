@@ -262,6 +262,187 @@ h1 {
 
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
+/* --------------------------------------------------------------------- hero */
+
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.hero__score-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 3px solid var(--accent);
+}
+
+.hero__score {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+
+.hero__score-label {
+  margin-top: 1px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hero__right {
+  flex: 1;
+  min-width: 0;
+}
+
+.hero__rec {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 12.5px;
+}
+
+.hero__rec--buy      { background: var(--ok-bg);   color: var(--ok-fg); }
+.hero__rec--caution  { background: var(--warn-bg); color: var(--warn-fg); }
+.hero__rec--avoid    { background: var(--err-bg);  color: var(--err-fg); }
+.hero__rec--unknown  { background: var(--pending-bg); color: var(--pending-fg); }
+
+.hero__stars {
+  margin-top: 8px;
+  color: var(--warn-fg);
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+
+.hero__confidence {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.hero__claim {
+  margin: 8px 0 0;
+  color: var(--fg-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  font-style: italic;
+}
+
+/* ----------------------------------------------------------------- breakdown */
+
+.breakdown { margin: 0; padding: 0; list-style: none; }
+
+.breakdown__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.breakdown__label {
+  flex: 0 0 150px;
+  color: var(--fg-soft);
+  font-size: 12px;
+}
+
+.breakdown__track {
+  flex: 1;
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.breakdown__fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.breakdown__value {
+  flex: 0 0 auto;
+  min-width: 90px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* ---------------------------------------------------------------- review risk */
+
+.chip--risk-high   { background: var(--err-bg);  color: var(--err-fg); }
+.chip--risk-medium { background: var(--warn-bg); color: var(--warn-fg); }
+.chip--risk-low    { background: var(--ok-bg);   color: var(--ok-fg); }
+.chip--risk-insufficient_data { background: var(--pending-bg); color: var(--pending-fg); }
+
+.risk-signals { margin: 0 0 10px; padding: 0; list-style: none; }
+
+.risk-signals li {
+  position: relative;
+  margin-bottom: 6px;
+  padding-left: 14px;
+  color: var(--fg-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.risk-signals li::before {
+  position: absolute;
+  left: 0;
+  top: -1px;
+  color: var(--warn-fg);
+  content: "\2013";
+  font-weight: 700;
+}
+
+.risk-disclaimer {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* -------------------------------------------------------------------- themes */
+
+.themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.theme {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.theme__dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.theme--positive .theme__dot { background: var(--pro); }
+.theme--negative .theme__dot { background: var(--con); }
+.theme--mixed .theme__dot    { background: var(--warn-fg); }
+
+.theme__count { color: var(--muted); font-size: 10.5px; }
+
 /* ---------------------------------------------------------------- sections */
 
 .section { padding: 18px 24px; border-bottom: 1px solid var(--line); }

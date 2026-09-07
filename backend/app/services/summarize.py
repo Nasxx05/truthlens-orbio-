@@ -24,6 +24,8 @@ from typing import Dict, List, Optional, Tuple
 
 from app.config import settings
 from app.services.llm import SummaryOutput, SummaryRequest, SummaryResult, get_provider
+from app.services.risk import compute_review_risk
+from app.services.scoring import compute_recommendation, compute_score_breakdown
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,9 @@ class SummaryBundle:
     summary: Optional[SummaryOutput] = None
     meta: SummaryResult = field(default_factory=SummaryResult)
     adjustments: List[str] = field(default_factory=list)
+    review_risk: Optional[dict] = None
+    score_breakdown: Optional[dict] = None
+    recommendation: str = "INSUFFICIENT_DATA"
 
     def to_meta_dict(self) -> dict:
         data = self.meta.to_dict()
@@ -143,8 +148,9 @@ def _apply_caution(
         share = filtered_out / total_scraped
         if share >= 0.3:
             add(
-                f"{filtered_out} of {total_scraped} reviews ({share:.0%}) were removed as "
-                "likely fake, which is high — treat the remaining reviews with care."
+                f"{filtered_out} of {total_scraped} reviews ({share:.0%}) were removed by "
+                "automated review-pattern filtering, which is a high share — treat the "
+                "remaining reviews with care."
             )
 
     rated = {source: value for source, value in ratings.items() if value}
@@ -187,6 +193,8 @@ async def summarize_reviews(
     total_scraped: Optional[int] = None,
     provider_name: Optional[str] = None,
     video_evidence: Optional[List[dict]] = None,
+    filter_report: Optional[dict] = None,
+    product_description: Optional[str] = None,
 ) -> SummaryBundle:
     """Summarize the reviews that passed filtering.
 
@@ -196,12 +204,19 @@ async def summarize_reviews(
     When ``reviews`` is empty, a verdict is still produced — grounded in
     ``video_evidence`` and, failing that, the model's own general knowledge —
     rather than returning nothing. See ``prompt.py``'s fallback prompt.
+
+    ``filter_report`` is the ``FilterReport.to_dict()`` shape produced by
+    ``app.services.nlp.filter`` over the *pre-filter* review set, used to
+    compute Review Risk — a presentation layer over data already computed
+    for filtering, not new detection logic.
     """
     started = time.monotonic()
     total_scraped = len(reviews) if total_scraped is None else total_scraped
     filtered_out = max(0, total_scraped - len(reviews))
 
-    bundle = SummaryBundle(meta=SummaryResult(provider="none"))
+    review_risk = compute_review_risk(filter_report, total_scraped)
+
+    bundle = SummaryBundle(meta=SummaryResult(provider="none"), review_risk=review_risk)
 
     provider = get_provider(provider_name)
     if provider is None:
@@ -222,6 +237,7 @@ async def summarize_reviews(
         filtered_out=filtered_out,
         ratings_by_source=ratings,
         video_evidence=(video_evidence or []) if not reviews else [],
+        product_description=product_description,
     )
 
     result = await provider.summarize(request)
@@ -245,5 +261,24 @@ async def summarize_reviews(
 
     if adjustments:
         logger.info("summary adjusted: %s", "; ".join(adjustments))
+
+    review_count = result.reviews_used or len(reviews)
+    competitor_present = "competitor" in sources
+    bundle.score_breakdown = compute_score_breakdown(
+        trust_score=summary.trust_score,
+        confidence=summary.confidence,
+        review_count=review_count,
+        source_count=len(sources),
+        ratings_by_source=ratings,
+        review_risk=review_risk,
+        video_count=len(video_evidence or []) if not reviews else 0,
+        competitor_present=competitor_present,
+    )
+    bundle.recommendation = compute_recommendation(
+        trust_score=summary.trust_score,
+        confidence=summary.confidence,
+        review_count=review_count,
+        review_risk=review_risk,
+    )
 
     return bundle
