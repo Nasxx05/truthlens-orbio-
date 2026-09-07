@@ -61,14 +61,22 @@ Rules:
    confidence you give. When no reviews are supplied at all (see below), rule 1's
    restriction to supplied reviews does not apply — that case has its own rules.
 9. Exception to rule 1, and only when you are told explicitly that no customer
-   reviews were found for this product: you may then base pros/cons/verdict on any
-   video commentary you are given, clearly attributed as coming from videos rather
-   than reviews; and, only if you genuinely recognize this specific product (or, failing
-   that, its brand/category) from your own training knowledge, you may add one brief,
-   clearly-labeled general-reputation opinion. If you have neither video evidence nor
-   real recognition of the product, say plainly that there is no evidence at all rather
-   than inventing anything — set confidence to 'none' and keep trust_score/star_rating
-   near the middle to reflect that uncertainty."""
+   reviews were found for this product: base pros/cons/verdict on any video commentary
+   you are given, clearly attributed as coming from videos rather than reviews. Then, if
+   you recognize this specific product, or failing that its brand or product category,
+   from your own training knowledge — which is true for almost any real, named,
+   commercially sold product — you MUST give your own general-reputation opinion of it,
+   clearly labeled as your own knowledge rather than review evidence (e.g. "Based on its
+   general reputation, ..."). This opinion is the primary content of the verdict when
+   there are no reviews and little or no video evidence — it is not optional and not
+   merely something you "may" add. Never write a verdict that only says the evidence is
+   insufficient to judge the product; a shopper asking about a real product wants your
+   actual take on it, not a refusal to have one. Only fall back to "there is no evidence
+   and I don't recognize this product" when you genuinely do not know what the product
+   is at all — an obscure or fictitious name, not merely an unreviewed one. Whichever
+   case applies, set confidence to 'none', and set trust_score/star_rating to reflect
+   your real opinion (do not flatten every thin-evidence case to a lazy default around
+   the middle)."""
 
 
 # How the evidence is described to the model, and what each tier licenses. The
@@ -248,11 +256,14 @@ def _build_fallback_prompt(request: SummaryRequest) -> Tuple[str, int]:
         (
             "There are no scraped reviews. Follow rule 9: if video commentary is listed "
             "above, base pros/cons/verdict on what those videos say, attributed to videos "
-            "not reviews. If you genuinely recognize this specific product or its brand, "
-            "you may add one brief general-reputation opinion, clearly labeled as such. If "
-            "you have neither, say plainly that there is no evidence at all. Either way, set "
-            "confidence to 'none' and give a trust_score/star_rating reflecting genuine "
-            "uncertainty rather than an extreme."
+            "not reviews. Then — since you almost certainly recognize this product, its "
+            "brand, or at least its category — give your own general-reputation opinion of "
+            "it, clearly labeled as your own knowledge rather than review evidence. This is "
+            "required, not optional: do not respond with only a statement that there isn't "
+            "enough evidence to judge it. Only say there is no evidence at all if you "
+            "truly do not recognize this product, its brand, or its category by name. "
+            "Either way, set confidence to 'none' and give a trust_score/star_rating that "
+            "reflects your actual opinion of the product, not a default near the middle."
         ),
         "",
         "---",
