@@ -39,6 +39,7 @@ const ui = {
   errorBody: $("error-body"),
   errorHint: $("error-hint"),
   stateThin: $("state-thin"),
+  thinTitle: $("thin-title"),
   thinBody: $("thin-body"),
 
   manual: $("manual"),
@@ -476,13 +477,12 @@ function finishVideos(videoSources) {
 }
 
 function renderDone(event) {
-  const ok = event.status === "ok";
-  setBadge(ok ? "done" : "thin data", ok ? "ok" : "warn");
-
-  if (!ok && event.message) {
-    ui.thinBody.textContent = event.message;
-    show(ui.stateThin, true);
-  }
+  // A verdict — with trust score and star rating — is always produced now,
+  // even from video evidence or general knowledge when there are no
+  // reviews, so a low review count is not "not enough data" anymore. Each
+  // section (reviews/summary/videos) already renders its own final state;
+  // no separate blocking banner is shown on top of it.
+  setBadge("done", "ok");
 
   const parts = [];
   if ((event.contributed || []).length) parts.push(event.contributed.join(", "));
@@ -660,6 +660,7 @@ async function analyze(body) {
       // timeout fired — wiping them and showing a scary error would throw
       // away a correct answer just because it arrived slowly.
       setBadge("partial", "warn");
+      if (ui.thinTitle) ui.thinTitle.textContent = "Still finishing up";
       ui.thinBody.textContent =
         "The verdict is taking longer than expected, but here's what we found so far.";
       show(ui.stateThin, true);
