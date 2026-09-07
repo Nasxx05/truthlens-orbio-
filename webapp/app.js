@@ -16,7 +16,7 @@ const API_BASE = "https://truthlens-orbio.onrender.com";
 const STREAM_URL = `${API_BASE}/analyze/stream`;
 const ANALYZE_URL = `${API_BASE}/analyze`;
 
-const REQUEST_TIMEOUT_MS = 60000;
+const REQUEST_TIMEOUT_MS = 120000;
 const REVIEWS_SHOWN = 3;        // shown initially; "show more" reveals the rest
 const REVIEWS_MAX = 8;
 const RECENT_MAX = 6;
@@ -88,6 +88,8 @@ const ui = {
 let diagnostics = {};
 let hiddenReviews = [];
 let lastSubmission = null;
+/** Has any reviews/videos/summary event already rendered content this run? */
+let hasPartialResults = false;
 
 /* --------------------------------------------------------------- utility */
 
@@ -110,6 +112,7 @@ function setStep(step, state) {
 function resetView() {
   diagnostics = {};
   hiddenReviews = [];
+  hasPartialResults = false;
 
   show(ui.rail, true);
   for (const step of ["reviews", "summary", "videos"]) setStep(step, "active");
@@ -542,12 +545,15 @@ function applyEvent(event) {
       break;
     case "reviews":
       renderReviews(event);
+      hasPartialResults = true;
       break;
     case "videos":
       appendVideos(event.videos);
+      hasPartialResults = true;
       break;
     case "summary":
       renderSummary(event.summary, event.llm);
+      hasPartialResults = true;
       break;
     case "match":
       break;
@@ -676,8 +682,18 @@ async function analyze(body) {
     const streamed = await runStream(body, controller.signal);
     if (!streamed) await runOnce(body, controller.signal);
   } catch (error) {
-    hideResults();
-    fail(...explainNetwork(error));
+    if (error.name === "AbortError" && hasPartialResults) {
+      // Reviews/videos/summary already streamed in successfully before the
+      // timeout fired — wiping them and showing a scary error would throw
+      // away a correct answer just because it arrived slowly.
+      setBadge("partial", "warn");
+      ui.thinBody.textContent =
+        "The verdict is taking longer than expected, but here's what we found so far.";
+      show(ui.stateThin, true);
+    } else {
+      hideResults();
+      fail(...explainNetwork(error));
+    }
   } finally {
     clearTimeout(timer);
     ui.debugBody.textContent = JSON.stringify(diagnostics, null, 2);
