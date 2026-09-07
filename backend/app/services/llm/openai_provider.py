@@ -168,18 +168,50 @@ class OpenAIProvider(LLMProvider):
         return getattr(response, "output_parsed", None), None
 
     async def _via_chat(self, client, user_prompt: str):
-        """Chat Completions path: ``response_format`` and ``message.parsed``."""
-        response = await client.chat.completions.parse(
+        """Chat Completions path.
+
+        Uses a plain ``json_object`` response format and parses the JSON
+        ourselves, rather than the SDK's ``.parse()`` + strict-schema
+        ``response_format=SummaryOutput``: many OpenRouter-proxied models
+        (including free ones) don't support strict JSON-schema mode, and can
+        return a body with ``choices: null`` when asked for it — which
+        crashes the SDK's own response parser (``TypeError: 'NoneType'
+        object is not iterable``) before we ever see an error. A json_object
+        request plus a schema description in the prompt degrades much more
+        gracefully across providers.
+        """
+        schema_hint = (
+            "\n\nRespond with a single JSON object only, no prose outside it, matching "
+            "exactly this shape: "
+            '{"pros": [string], "cons": [string], "verdict": string, '
+            '"confidence": "high"|"medium"|"low"|"none", "caveats": [string], '
+            '"trust_score": integer 0-100, "star_rating": number 0-5 in steps of 0.5}'
+        )
+        response = await client.chat.completions.create(
             model=self._model,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": SYSTEM_PROMPT + schema_hint},
                 {"role": "user", "content": user_prompt},
             ],
-            response_format=SummaryOutput,
+            response_format={"type": "json_object"},
             max_tokens=settings.llm_max_tokens,
         )
-        message = response.choices[0].message
+
+        choices = getattr(response, "choices", None) or []
+        if not choices:
+            note = getattr(response, "error", None)
+            return None, f"model returned no choices{f': {note}' if note else ''}"
+
+        message = choices[0].message
         refusal = getattr(message, "refusal", None)
         if refusal:
             return None, f"model declined to answer: {str(refusal)[:160]}"
-        return getattr(message, "parsed", None), None
+
+        content = (getattr(message, "content", None) or "").strip()
+        if not content:
+            return None, "model returned an empty response"
+
+        try:
+            return SummaryOutput.model_validate_json(content), None
+        except Exception as error:
+            return None, f"model output did not match the expected shape: {error}"
