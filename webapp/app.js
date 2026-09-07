@@ -52,7 +52,6 @@ const ui = {
   thinBody: $("thin-body"),
 
   secSummary: $("sec-summary"),
-  skelSummary: $("skel-summary"),
   summaryBody: $("summary-body"),
   summaryEmpty: $("summary-empty"),
   summaryConfidence: $("summary-confidence"),
@@ -66,14 +65,12 @@ const ui = {
   caveats: $("caveats"),
 
   secReviews: $("sec-reviews"),
-  skelReviews: $("skel-reviews"),
   reviews: $("reviews"),
   reviewsCount: $("reviews-count"),
   reviewsEmpty: $("reviews-empty"),
   reviewsMore: $("reviews-more"),
 
   secVideos: $("sec-videos"),
-  skelVideos: $("skel-videos"),
   videos: $("videos"),
   videosCount: $("videos-count"),
   videosEmpty: $("videos-empty"),
@@ -121,13 +118,12 @@ function resetView() {
   show(ui.stateError, false);
   show(ui.stateThin, false);
 
-  for (const [section, skeleton, body] of [
-    [ui.secSummary, ui.skelSummary, ui.summaryBody],
-    [ui.secReviews, ui.skelReviews, ui.reviews],
-    [ui.secVideos, ui.skelVideos, ui.videos],
+  for (const [section, body] of [
+    [ui.secSummary, ui.summaryBody],
+    [ui.secReviews, ui.reviews],
+    [ui.secVideos, ui.videos],
   ]) {
     show(section, true);
-    show(skeleton, true);
     show(body, false);
   }
 
@@ -284,7 +280,6 @@ function bulletList(target, items) {
 }
 
 function renderSummary(summary, llm) {
-  show(ui.skelSummary, false);
   setStep("summary", "done");
 
   const hasContent =
@@ -408,7 +403,6 @@ function reviewNode(review) {
 }
 
 function renderReviews(event) {
-  show(ui.skelReviews, false);
 
   const passed = event.reviews_passed || 0;
   const total = (event.reviews || []).length;
@@ -481,7 +475,6 @@ function videoNode(video) {
 /** Videos arrive per platform, so they are appended rather than replaced. */
 function appendVideos(videos) {
   if (!videos || !videos.length) return;
-  show(ui.skelVideos, false);
   show(ui.videos, true);
   setStep("videos", "done");
   for (const video of videos) ui.videos.appendChild(videoNode(video));
@@ -489,7 +482,6 @@ function appendVideos(videos) {
 }
 
 function finishVideos(videoSources) {
-  show(ui.skelVideos, false);
   if (ui.videos.children.length) return;
 
   setStep("videos", "empty");
@@ -517,8 +509,6 @@ function renderDone(event) {
   ui.footMeta.textContent = parts.join(" · ");
 
   finishVideos(event.video_sources);
-  show(ui.skelSummary, false);
-  show(ui.skelReviews, false);
 }
 
 /* ------------------------------------------------------------------ backend */
