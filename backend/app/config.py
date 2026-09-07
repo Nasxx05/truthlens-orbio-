@@ -120,6 +120,12 @@ class Settings:
     # id, and guessing one produces a confusing 404 at request time instead of
     # a clear "you have not chosen a model".
     openai_model: str = field(default_factory=lambda: (os.getenv("OPENAI_MODEL", "") or "").strip())
+    # Tried when the primary model errors (rate limit, upstream overload, bad
+    # response shape, etc). Empty means no fallback — a primary failure is
+    # just a failure, as before.
+    openai_fallback_model: str = field(
+        default_factory=lambda: (os.getenv("OPENAI_FALLBACK_MODEL", "") or "").strip()
+    )
     # Empty means OpenAI's own API. Set to an OpenAI-compatible proxy (e.g.
     # https://openrouter.ai/api/v1) to route the "openai" provider through it
     # instead — useful for a provider whose only credential is a proxy key.

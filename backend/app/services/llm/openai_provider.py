@@ -18,7 +18,7 @@ when the package or the key is missing rather than failing a request.
 import logging
 import os
 import time
-from typing import Optional
+from typing import List, Optional
 
 from app.config import settings
 from app.services.llm.base import (
@@ -39,10 +39,18 @@ class OpenAIProvider(LLMProvider):
 
     def __init__(self, model: Optional[str] = None) -> None:
         self._model = model or settings.openai_model
+        self._fallback_model = settings.openai_fallback_model
 
     @property
     def model(self) -> Optional[str]:
         return self._model
+
+    def _candidate_models(self) -> List[str]:
+        """Models to try in order: primary, then fallback if it's a different one."""
+        candidates = [self._model]
+        if self._fallback_model and self._fallback_model != self._model:
+            candidates.append(self._fallback_model)
+        return candidates
 
     def available(self) -> bool:
         if not (os.getenv("OPENAI_API_KEY") or "").strip():
@@ -85,33 +93,47 @@ class OpenAIProvider(LLMProvider):
             client_kwargs["base_url"] = settings.openai_base_url
         client = openai.AsyncOpenAI(**client_kwargs)
 
+        candidates = self._candidate_models()
         try:
-            # The Responses API is OpenAI-proprietary; a proxy like OpenRouter
-            # only implements Chat Completions, so a custom base_url always
-            # takes the chat path even though client.responses still exists.
-            if not settings.openai_base_url and hasattr(client, "responses"):
-                result.summary, note = await self._via_responses(client, user_prompt)
-            else:
-                result.summary, note = await self._via_chat(client, user_prompt)
+            for index, model in enumerate(candidates):
+                is_fallback = index > 0
+                try:
+                    # The Responses API is OpenAI-proprietary; a proxy like
+                    # OpenRouter only implements Chat Completions, so a custom
+                    # base_url always takes the chat path even though
+                    # client.responses still exists.
+                    if not settings.openai_base_url and hasattr(client, "responses"):
+                        summary, note = await self._via_responses(client, model, user_prompt)
+                    else:
+                        summary, note = await self._via_chat(client, model, user_prompt)
+                except openai.AuthenticationError:
+                    summary, note = None, "OPENAI_API_KEY was rejected"
+                except openai.PermissionDeniedError:
+                    summary, note = None, "API key lacks permission for this model"
+                except openai.NotFoundError:
+                    summary, note = None, f"model {model!r} not found for this account"
+                except openai.RateLimitError:
+                    summary, note = None, "rate limited by the OpenAI API"
+                except openai.BadRequestError as error:
+                    summary, note = None, f"request rejected: {str(error)[:200]}"
+                except openai.APIConnectionError as error:
+                    summary, note = None, f"could not reach the OpenAI API: {type(error).__name__}"
 
-            if note:
-                result.notes.append(note)
-            result.ok = result.summary is not None
-            if not result.ok and not result.error:
+                if summary is not None:
+                    result.summary = summary
+                    result.model = model
+                    result.ok = True
+                    if is_fallback:
+                        result.notes.append(f"primary model {candidates[0]!r} failed; used fallback {model!r}")
+                    if note:
+                        result.notes.append(note)
+                    break
+
+                # This attempt produced nothing — record why and, if there is
+                # another candidate left, try it instead of giving up.
+                result.notes.append(f"{model!r}: {note or 'no parseable structured output'}")
                 result.error = note or "model returned no parseable structured output"
 
-        except openai.AuthenticationError:
-            result.error = "OPENAI_API_KEY was rejected"
-        except openai.PermissionDeniedError:
-            result.error = "API key lacks permission for this model"
-        except openai.NotFoundError:
-            result.error = f"model {self._model!r} not found for this account"
-        except openai.RateLimitError:
-            result.error = "rate limited by the OpenAI API"
-        except openai.BadRequestError as error:
-            result.error = f"request rejected: {str(error)[:200]}"
-        except openai.APIConnectionError as error:
-            result.error = f"could not reach the OpenAI API: {type(error).__name__}"
         except Exception as error:
             logger.exception("openai summarization failed")
             result.error = f"{type(error).__name__}: {error}"
@@ -124,22 +146,22 @@ class OpenAIProvider(LLMProvider):
 
         if result.ok:
             logger.info(
-                "openai summary: %s pros, %s cons, confidence=%s, %s reviews in %sms",
+                "openai summary: %s pros, %s cons, confidence=%s, %s reviews in %sms (model=%s)",
                 len(result.summary.pros), len(result.summary.cons),
-                result.summary.confidence, result.reviews_used, result.duration_ms,
+                result.summary.confidence, result.reviews_used, result.duration_ms, result.model,
             )
         else:
             logger.warning(
                 "llm failure",
                 extra={"event_type": "llm_error", "provider": self.name,
-                       "model": self._model, "error": result.error},
+                       "model": result.model, "error": result.error},
             )
         return result
 
-    async def _via_responses(self, client, user_prompt: str):
+    async def _via_responses(self, client, model: str, user_prompt: str):
         """Responses API path: ``text_format`` and ``output_parsed``."""
         response = await client.responses.parse(
-            model=self._model,
+            model=model,
             input=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
@@ -167,7 +189,7 @@ class OpenAIProvider(LLMProvider):
 
         return getattr(response, "output_parsed", None), None
 
-    async def _via_chat(self, client, user_prompt: str):
+    async def _via_chat(self, client, model: str, user_prompt: str):
         """Chat Completions path.
 
         Uses a plain ``json_object`` response format and parses the JSON
@@ -188,7 +210,7 @@ class OpenAIProvider(LLMProvider):
             '"trust_score": integer 0-100, "star_rating": number 0-5 in steps of 0.5}'
         )
         response = await client.chat.completions.create(
-            model=self._model,
+            model=model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT + schema_hint},
                 {"role": "user", "content": user_prompt},
