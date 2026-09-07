@@ -96,7 +96,15 @@ async def scrape_competitor_reviews(
 
     host = _host_domain(host_url or "", host_site)
     attempted: List[str] = []
-    matched_product: Optional[dict] = None
+    # Up to two independently-matched platforms contribute reviews, not just
+    # the first — a name-only search should compare platforms, and one
+    # confident match is thin evidence for a verdict. Each site's reviews stay
+    # tagged with that site's own source name (see `site_source` below), so
+    # merging them into one ScrapeResult never loses attribution.
+    matched_sites: List[str] = []
+    best_verdict = verdict
+    best_matched: Optional[dict] = None
+    max_sites = 2
 
     def remaining() -> float:
         return settings.competitor_timeout - (time.monotonic() - started)
@@ -119,6 +127,8 @@ async def scrape_competitor_reviews(
     try:
         async with Fetcher() as fetcher:
             for name in settings.competitor_sites:
+                if len(matched_sites) >= max_sites:
+                    break
                 adapter = search_adapter(name)
                 if adapter is None:
                     result.notes.append(f"unknown competitor site '{name}'")
@@ -186,16 +196,19 @@ async def scrape_competitor_reviews(
                     result.notes.append(f"{adapter.name}: no confident match — {reason}")
                     continue
 
-                matched_product = matched
+                if best_matched is None:
+                    best_verdict, best_matched = verdict, matched
                 logger.info(
                     "competitor match on %s: %r (score %.3f, %s)",
                     adapter.name, matched.get("title"), verdict.score, verdict.confidence,
                 )
-                result.source = _source_name(matched.get("url", ""), adapter.name)
+                site_source = _source_name(matched.get("url", ""), adapter.name)
                 result.notes.append(
                     f"matched {matched.get('title')!r} on {adapter.name} "
                     f"(score {verdict.score:.2f}, {verdict.confidence})"
                 )
+
+                added_any_here = False
 
                 # --- reviews ---
                 for review_url in adapter.review_urls(matched.get("url", ""), None)[:2]:
@@ -219,9 +232,11 @@ async def scrape_competitor_reviews(
                     if not review_page.ok or not review_page.html:
                         continue
 
-                    reviews, strategy = _extract(review_page.html, result.source, review_page.url)
+                    reviews, strategy = _extract(review_page.html, site_source, review_page.url)
                     added = result.add(reviews, strategy, limit)
-                    logger.info("competitor %s: %s review(s) via %s", result.source, added, strategy)
+                    logger.info("competitor %s: %s review(s) via %s", site_source, added, strategy)
+                    if added:
+                        added_any_here = True
 
                     if added:
                         # Paginate from whichever URL produced reviews.
@@ -241,13 +256,19 @@ async def scrape_competitor_reviews(
                             result.pages_fetched += 1
                             if nxt is None or not nxt.ok or not nxt.html or nxt.blocked:
                                 break
-                            more, strategy = _extract(nxt.html, result.source, nxt.url)
+                            more, strategy = _extract(nxt.html, site_source, nxt.url)
                             if not result.add(more, strategy, limit):
                                 break
                             page_url, html, page_number = nxt.url, nxt.html, page_number + 1
 
-                if result.reviews:
-                    break  # one confident competitor is the goal, not all of them
+                if added_any_here:
+                    matched_sites.append(site_source)
+                    # Multiple platforms' reviews share one result; the label
+                    # reflects all of them so a reader can see who was compared.
+                    result.source = " + ".join(matched_sites)
+
+                if len(result.reviews) >= limit:
+                    break  # enough evidence gathered; no need to try a third site
 
     except Exception as error:
         logger.exception(
@@ -263,12 +284,13 @@ async def scrape_competitor_reviews(
     if not result.reviews and not result.error:
         if result.blocked:
             result.error = "competitor site(s) blocked the scrape"
-        elif not verdict.matched:
+        elif not best_verdict.matched:
             result.error = "no confident product match on any competitor site"
 
     result.duration_ms = int((time.monotonic() - started) * 1000)
     logger.info(
-        "competitor done source=%s count=%s matched=%s score=%.2f in %sms",
-        result.source, len(result.reviews), verdict.matched, verdict.score, result.duration_ms,
+        "competitor done source=%s count=%s sites=%s matched=%s score=%.2f in %sms",
+        result.source, len(result.reviews), len(matched_sites),
+        best_verdict.matched, best_verdict.score, result.duration_ms,
     )
-    return result, verdict, (matched_product if verdict.matched else None)
+    return result, best_verdict, (best_matched if best_verdict.matched else None)
