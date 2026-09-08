@@ -81,6 +81,7 @@ const ui = {
   productImage: $("product-image"),
   rail: $("rail"),
   railList: $("rail-list"),
+  railProgress: $("rail-progress"),
   main: $("main"),
 
   partialBanner: $("partial-banner"),
@@ -103,14 +104,17 @@ const ui = {
   rescan: $("rescan"),
 
   secHero: $("sec-hero"),
+  heroScoreRing: $("hero-score-ring"),
   heroScore: $("hero-score"),
   heroRec: $("hero-rec"),
   heroStars: $("hero-stars"),
   heroConfidence: $("hero-confidence"),
   heroClaim: $("hero-claim"),
+  heroExplanation: $("hero-explanation"),
 
   secBreakdown: $("sec-breakdown"),
   breakdown: $("breakdown"),
+  breakdownExplanation: $("breakdown-explanation"),
 
   secRisk: $("sec-risk"),
   riskLevel: $("risk-level"),
@@ -122,6 +126,9 @@ const ui = {
   themes: $("themes"),
 
   secReasons: $("sec-reasons"),
+  reasonsHeading: $("reasons-heading"),
+  evidenceList: $("evidence-list"),
+  reasonsFallback: $("reasons-fallback"),
   reasonsBuyCol: $("reasons-buy-col"),
   reasonsBuy: $("reasons-buy"),
   reasonsTwiceCol: $("reasons-twice-col"),
@@ -218,6 +225,7 @@ function buildRail(stages) {
       return row;
     })
   );
+  updateRailProgress();
 }
 
 /** Apply a real stage update to one rail row. */
@@ -237,6 +245,19 @@ function setStep(stepId, status, detail) {
       detailEl.hidden = true;
     }
   }
+  updateRailProgress();
+}
+
+/** "8/11 complete" — counted from the rail's real current states, never a timer. */
+function updateRailProgress() {
+  if (!ui.railProgress || !ui.railList) return;
+  const rows = [...ui.railList.querySelectorAll(".rail__step")];
+  if (!rows.length) {
+    ui.railProgress.textContent = "";
+    return;
+  }
+  const done = rows.filter((r) => ["complete", "failed", "skipped"].includes(r.dataset.state)).length;
+  ui.railProgress.textContent = `${done}/${rows.length}`;
 }
 
 function show(node, visible = true) {
@@ -272,8 +293,10 @@ function resetView() {
   show(ui.secThemes, false);
   show(ui.secReasons, false);
   ui.breakdown.replaceChildren();
+  show(ui.breakdownExplanation, false);
   ui.riskSignals.replaceChildren();
   ui.themes.replaceChildren();
+  ui.evidenceList.replaceChildren();
   ui.reasonsBuy.replaceChildren();
   ui.reasonsTwice.replaceChildren();
   ui.heroScore.textContent = "–";
@@ -281,6 +304,11 @@ function resetView() {
   ui.heroConfidence.textContent = "";
   show(ui.heroRec, false);
   show(ui.heroClaim, false);
+  show(ui.heroExplanation, false);
+  if (ui.heroScoreRing) {
+    ui.heroScoreRing.style.setProperty("--pct", 0);
+    ui.heroScoreRing.style.setProperty("--ring-color", "var(--line)");
+  }
   show(ui.riskEmpty, false);
 
   ui.pros.replaceChildren();
@@ -426,9 +454,30 @@ function bulletList(target, items) {
   }
 }
 
+/** Ring colour by score range — the same red/amber/green vocabulary used everywhere else in the UI. */
+function scoreRingColor(score) {
+  if (score >= 70) return "var(--ok-fg)";
+  if (score >= 40) return "var(--warn-fg)";
+  return "var(--err-fg)";
+}
+
 function renderHero(summary) {
   const trustScore = summary && typeof summary.trust_score === "number" ? summary.trust_score : null;
-  ui.heroScore.textContent = trustScore === null ? "–" : `${Math.round(trustScore)}`;
+  const score = trustScore === null ? null : Math.round(trustScore);
+  ui.heroScore.textContent = score === null ? "–" : `${score}`;
+
+  if (ui.heroScoreRing) {
+    ui.heroScoreRing.style.setProperty("--pct", score === null ? 0 : score);
+    ui.heroScoreRing.style.setProperty("--ring-color", score === null ? "var(--line)" : scoreRingColor(score));
+  }
+
+  const explanation = summary && summary.score_breakdown && summary.score_breakdown.explanation;
+  if (explanation) {
+    ui.heroExplanation.textContent = explanation;
+    show(ui.heroExplanation, true);
+  } else {
+    show(ui.heroExplanation, false);
+  }
 
   const rec = summary && summary.recommendation;
   if (rec && RECOMMENDATION_LABEL[rec]) {
@@ -464,6 +513,13 @@ function renderBreakdown(breakdown) {
     return;
   }
 
+  if (breakdown.explanation) {
+    ui.breakdownExplanation.textContent = breakdown.explanation;
+    show(ui.breakdownExplanation, true);
+  } else {
+    show(ui.breakdownExplanation, false);
+  }
+
   ui.breakdown.replaceChildren(
     ...components.map((component) => {
       const li = document.createElement("li");
@@ -471,13 +527,23 @@ function renderBreakdown(breakdown) {
 
       const label = document.createElement("span");
       label.className = "breakdown__label";
-      label.textContent = component.label || component.key || "";
+      const labelText = document.createElement("span");
+      labelText.textContent = component.label || component.key || "";
+      label.appendChild(labelText);
+      if (typeof component.weight === "number") {
+        const weight = document.createElement("span");
+        weight.className = "breakdown__weight";
+        weight.textContent = `${Math.round(component.weight * 100)}% of score`;
+        label.appendChild(weight);
+      }
 
       const track = document.createElement("div");
       track.className = "breakdown__track";
       const fill = document.createElement("div");
-      fill.className = "breakdown__fill";
-      const pct = typeof component.value === "number" ? Math.max(0, Math.min(100, component.value)) : 0;
+      const hasValue = typeof component.value === "number";
+      const pct = hasValue ? Math.max(0, Math.min(100, component.value)) : 0;
+      const tone = !hasValue ? "" : pct >= 70 ? " breakdown__fill--high" : pct >= 40 ? " breakdown__fill--mid" : " breakdown__fill--low";
+      fill.className = "breakdown__fill" + tone;
       fill.style.width = `${pct}%`;
       track.appendChild(fill);
 
@@ -487,6 +553,7 @@ function renderBreakdown(breakdown) {
         typeof component.value === "number"
           ? `${Math.round(component.value)}/100`
           : component.note || "Not enough data";
+      value.title = component.note || "";
 
       li.append(label, track, value);
       return li;
@@ -502,7 +569,8 @@ function renderRisk(risk) {
   }
 
   const level = ["low", "medium", "high"].includes(risk.level) ? risk.level : "insufficient_data";
-  ui.riskLevel.textContent = level === "insufficient_data" ? "not enough data" : `${level} risk`;
+  const scoreSuffix = typeof risk.score === "number" ? ` · ${risk.score}/100` : "";
+  ui.riskLevel.textContent = level === "insufficient_data" ? "not enough data" : `${level} risk${scoreSuffix}`;
   ui.riskLevel.className = `chip chip--risk-${level}`;
   show(ui.riskLevel, true);
 
@@ -563,14 +631,101 @@ function renderThemes(themes) {
   show(ui.secThemes, true);
 }
 
-function renderReasons(buy, thinkTwice) {
+const EVIDENCE_TYPE_LABEL = { evidence: "Evidence", concern: "Concern", claim_conflict: "Claim conflict" };
+
+function evidenceNode(item) {
+  const li = document.createElement("li");
+  const type = EVIDENCE_TYPE_LABEL[item.type] ? item.type : "concern";
+  li.className = `evidence-item evidence-item--${type}`;
+
+  const head = document.createElement("div");
+  head.className = "evidence-item__head";
+
+  const typeTag = document.createElement("span");
+  typeTag.className = "evidence-item__type";
+  typeTag.textContent = EVIDENCE_TYPE_LABEL[type];
+
+  const category = document.createElement("span");
+  category.className = "evidence-item__category";
+  category.textContent = item.category || "";
+  category.title = item.category || "";
+
+  head.append(typeTag, category);
+
+  if (typeof item.impact_points === "number" && item.impact_points !== 0) {
+    const impact = document.createElement("span");
+    impact.className = `evidence-item__impact evidence-item__impact--${item.impact_points > 0 ? "pos" : "neg"}`;
+    impact.textContent = item.impact_points > 0 ? `+${item.impact_points}` : `${item.impact_points}`;
+    impact.title = "Contribution to the trust score";
+    head.appendChild(impact);
+  }
+
+  const explanation = document.createElement("p");
+  explanation.className = "evidence-item__explanation";
+  explanation.textContent = item.explanation || "";
+
+  const counts = document.createElement("div");
+  counts.className = "evidence-item__counts";
+  const reviewMentions = item.review_mentions || 0;
+  const externalMentions = item.external_mentions || 0;
+  const reviewSpan = document.createElement("span");
+  reviewSpan.textContent = `${reviewMentions} review${reviewMentions === 1 ? "" : "s"} mention this`;
+  counts.appendChild(reviewSpan);
+  if (externalMentions > 0) {
+    const externalSpan = document.createElement("span");
+    externalSpan.textContent = `${externalMentions} external source${externalMentions === 1 ? "" : "s"} confirm`;
+    counts.appendChild(externalSpan);
+  }
+
+  li.append(head, explanation, counts);
+
+  if (type === "claim_conflict" && (item.claim_text || item.observed_reality)) {
+    const claim = document.createElement("div");
+    claim.className = "evidence-item__claim";
+    if (item.claim_text) {
+      const claimLine = document.createElement("div");
+      const b = document.createElement("b");
+      b.textContent = "Claim: ";
+      claimLine.append(b, document.createTextNode(item.claim_text));
+      claim.appendChild(claimLine);
+    }
+    if (item.observed_reality) {
+      const realityLine = document.createElement("div");
+      const b = document.createElement("b");
+      b.textContent = "Reality: ";
+      realityLine.append(b, document.createTextNode(item.observed_reality));
+      claim.appendChild(realityLine);
+    }
+    li.appendChild(claim);
+  }
+
+  return li;
+}
+
+/**
+ * Evidence cards are the primary rendering; falls back to plain reasons
+ * bullets only when no structured evidence was produced.
+ */
+function renderReasons(evidence, buy, thinkTwice) {
+  const items = evidence || [];
+  if (items.length) {
+    ui.reasonsHeading.textContent = "Evidence";
+    ui.evidenceList.replaceChildren(...items.map(evidenceNode));
+    show(ui.evidenceList, true);
+    show(ui.reasonsFallback, false);
+    show(ui.secReasons, true);
+    return;
+  }
+
   const buyList = buy || [];
   const twiceList = thinkTwice || [];
-
+  ui.reasonsHeading.textContent = "Top reasons";
+  show(ui.evidenceList, false);
   bulletList(ui.reasonsBuy, buyList);
   bulletList(ui.reasonsTwice, twiceList);
   show(ui.reasonsBuyCol, buyList.length > 0);
   show(ui.reasonsTwiceCol, twiceList.length > 0);
+  show(ui.reasonsFallback, buyList.length > 0 || twiceList.length > 0);
   show(ui.secReasons, buyList.length > 0 || twiceList.length > 0);
 }
 
@@ -595,7 +750,7 @@ function renderSummary(summary, llm) {
 
   renderHero(summary);
   renderThemes(summary.themes);
-  renderReasons(summary.reasons_to_buy, summary.reasons_to_think_twice);
+  renderReasons(summary.evidence, summary.reasons_to_buy, summary.reasons_to_think_twice);
 
   ui.verdict.textContent = summary.verdict || "";
 

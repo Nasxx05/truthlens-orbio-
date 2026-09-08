@@ -19,7 +19,10 @@
     <!-- Investigation trail: built by popup.js from the backend's own stage
          list (the `started` event's `investigation` field). -->
     <div class="rail" id="rail" hidden>
-      <p class="rail__title">TrustLens investigation</p>
+      <div class="rail__head">
+        <p class="rail__title">TrustLens investigation</p>
+        <span class="rail__progress" id="rail-progress"></span>
+      </div>
       <div class="rail__list" id="rail-list"></div>
     </div>
 
@@ -35,15 +38,21 @@
     <main id="main">
       <!-- ERROR STATE -->
       <section class="state state--error" id="state-error" hidden>
-        <h2 class="state__title" id="error-title">Something went wrong</h2>
-        <p class="state__body" id="error-body"></p>
-        <pre class="state__hint" id="error-hint" hidden></pre>
+        <span class="state__icon" aria-hidden="true">✕</span>
+        <div class="state__text">
+          <h2 class="state__title" id="error-title">Something went wrong</h2>
+          <p class="state__body" id="error-body"></p>
+          <pre class="state__hint" id="error-hint" hidden></pre>
+        </div>
       </section>
 
       <!-- NOT ENOUGH DATA STATE -->
       <section class="state state--thin" id="state-thin" hidden>
-        <h2 class="state__title" id="thin-title">Still finishing up</h2>
-        <p class="state__body" id="thin-body"></p>
+        <span class="state__icon" aria-hidden="true">!</span>
+        <div class="state__text">
+          <h2 class="state__title" id="thin-title">Still finishing up</h2>
+          <p class="state__body" id="thin-body"></p>
+        </div>
       </section>
 
       <!-- MANUAL ENTRY -->
@@ -66,15 +75,18 @@
 
       <!-- HERO: trust score + recommendation, the centerpiece verdict -->
       <section class="hero" id="sec-hero" hidden>
-        <div class="hero__score-wrap">
-          <div class="hero__score" id="hero-score">–</div>
-          <div class="hero__score-label">trust score</div>
+        <div class="hero__score-ring" id="hero-score-ring">
+          <div class="hero__score-wrap">
+            <div class="hero__score" id="hero-score">–</div>
+            <div class="hero__score-label">trust score</div>
+          </div>
         </div>
         <div class="hero__right">
           <span class="badge hero__rec" id="hero-rec" hidden></span>
           <div class="hero__stars" id="hero-stars"></div>
           <div class="hero__confidence" id="hero-confidence"></div>
           <p class="hero__claim" id="hero-claim" hidden></p>
+          <p class="hero__explanation" id="hero-explanation" hidden></p>
         </div>
       </section>
 
@@ -107,8 +119,9 @@
       <!-- SIGNAL BREAKDOWN -->
       <section class="section" id="sec-breakdown" hidden>
         <div class="section__head">
-          <h2>Why should I trust this verdict?</h2>
+          <h2>Trust score breakdown</h2>
         </div>
+        <p class="breakdown__explanation" id="breakdown-explanation"></p>
         <ul class="breakdown" id="breakdown"></ul>
       </section>
 
@@ -131,12 +144,15 @@
         <ul class="themes" id="themes"></ul>
       </section>
 
-      <!-- REASONS TO BUY / THINK TWICE -->
+      <!-- EVIDENCE: structured findings behind the score, each traceable to
+           a signed score impact. Falls back to plain reasons bullets when no
+           structured evidence was produced. -->
       <section class="section" id="sec-reasons" hidden>
         <div class="section__head">
-          <h2>Top reasons</h2>
+          <h2 id="reasons-heading">Evidence</h2>
         </div>
-        <div class="prosCons">
+        <ul class="evidence-list" id="evidence-list" hidden></ul>
+        <div class="prosCons" id="reasons-fallback" hidden>
           <div class="prosCons__col" id="reasons-buy-col">
             <h3 class="prosCons__title prosCons__title--pro">Reasons to buy</h3>
             <ul class="bullets" id="reasons-buy"></ul>
