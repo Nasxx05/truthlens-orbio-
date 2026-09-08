@@ -33,8 +33,11 @@
       <section class="entry" id="entry">
         <div class="entry__label">Analyze a product</div>
         <form id="entry-form" class="row">
-          <input id="entry-input" class="input" type="text" placeholder="Product URL or name"
-                 autocomplete="off" spellcheck="false" />
+          <div class="input-wrap">
+            <input id="entry-input" class="input" type="text" placeholder="Product URL or name"
+                   autocomplete="off" spellcheck="false" />
+            <button type="button" id="entry-clear" class="input-clear" aria-label="Clear input" hidden>&times;</button>
+          </div>
           <button type="submit" class="btn">Analyze</button>
         </form>
         <p id="entry-error" class="error" hidden></p>

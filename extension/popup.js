@@ -97,6 +97,7 @@ const ui = {
   manual: $("manual"),
   manualForm: $("manual-form"),
   manualInput: $("manual-input"),
+  manualClear: $("manual-clear"),
   manualReason: $("manual-reason"),
   manualError: $("manual-error"),
   rescan: $("rescan"),
@@ -1172,6 +1173,7 @@ function submitManual(event) {
     return;
   }
   show(ui.manualError, false);
+  updateManualClear();
 
   // Anything that parses as a URL at all is sent as a URL, even with an
   // unsupported scheme — the backend rejects it with the real "invalid URL"
@@ -1196,6 +1198,20 @@ function submitManual(event) {
 ui.manualForm.addEventListener("submit", submitManual);
 ui.retry.addEventListener("click", run);
 ui.rescan.addEventListener("click", run);
+
+/** Show the clear ("×") button only while there's something to clear. */
+function updateManualClear() {
+  if (ui.manualClear) show(ui.manualClear, ui.manualInput.value.length > 0);
+}
+if (ui.manualInput) ui.manualInput.addEventListener("input", updateManualClear);
+if (ui.manualClear) {
+  ui.manualClear.addEventListener("click", () => {
+    ui.manualInput.value = "";
+    show(ui.manualError, false);
+    updateManualClear();
+    ui.manualInput.focus();
+  });
+}
 
 ui.reviewsMore.addEventListener("click", () => {
   for (const review of hiddenReviews) ui.reviews.appendChild(reviewNode(review));

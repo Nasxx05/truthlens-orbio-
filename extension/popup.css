@@ -623,10 +623,12 @@ h1 {
 .hint { margin: 0 0 9px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .row { display: flex; gap: 6px; }
 
+.input-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
+
 .input {
   flex: 1;
   min-width: 0;
-  padding: 6px 8px;
+  padding: 6px 26px 6px 8px;
   background: var(--bg);
   color: var(--fg);
   border: 1px solid var(--line);
@@ -635,6 +637,23 @@ h1 {
   font-family: inherit;
 }
 .input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+
+.input-clear {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.input-clear:hover { color: var(--fg); background: var(--surface); }
 
 .error { margin: 6px 0 0; color: var(--err-fg); font-size: 11px; }
 

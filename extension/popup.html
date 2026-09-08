@@ -53,8 +53,11 @@
           Couldn't detect a product on this page. Paste a product URL or type its name.
         </p>
         <form id="manual-form" class="row">
-          <input id="manual-input" class="input" type="text" placeholder="Product URL or name"
-                 autocomplete="off" spellcheck="false" />
+          <div class="input-wrap">
+            <input id="manual-input" class="input" type="text" placeholder="Product URL or name"
+                   autocomplete="off" spellcheck="false" />
+            <button type="button" id="manual-clear" class="input-clear" aria-label="Clear input" hidden>&times;</button>
+          </div>
           <button type="submit" class="btn">Analyze</button>
         </form>
         <p id="manual-error" class="error" hidden></p>

@@ -189,10 +189,12 @@ h1 {
 
 .row { display: flex; gap: 8px; }
 
+.input-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
+
 .input {
   flex: 1;
   min-width: 0;
-  padding: 9px 11px;
+  padding: 9px 30px 9px 11px;
   background: var(--bg);
   color: var(--fg);
   border: 1px solid var(--line);
@@ -201,6 +203,23 @@ h1 {
   font-family: inherit;
 }
 .input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+
+.input-clear {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.input-clear:hover { color: var(--fg); background: var(--surface); }
 
 .error { margin: 7px 0 0; color: var(--err-fg); font-size: 12px; }
 

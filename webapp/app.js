@@ -96,6 +96,7 @@ const ui = {
   entry: $("entry"),
   entryForm: $("entry-form"),
   entryInput: $("entry-input"),
+  entryClear: $("entry-clear"),
   entryError: $("entry-error"),
   recent: $("recent"),
   recentClear: $("recent-clear"),
@@ -1165,6 +1166,7 @@ function submitEntry() {
     return;
   }
   show(ui.entryError, false);
+  updateEntryClear();
 
   const parsed = parseEntry(value);
   lastSubmission = value;
@@ -1197,6 +1199,20 @@ ui.entryForm.addEventListener("submit", handleSubmit);
 ui.retry.addEventListener("click", () => {
   if (ui.entryInput.value.trim()) submitEntry();
 });
+
+/** Show the clear ("×") button only while there's something to clear. */
+function updateEntryClear() {
+  if (ui.entryClear) show(ui.entryClear, ui.entryInput.value.length > 0);
+}
+if (ui.entryInput) ui.entryInput.addEventListener("input", updateEntryClear);
+if (ui.entryClear) {
+  ui.entryClear.addEventListener("click", () => {
+    ui.entryInput.value = "";
+    show(ui.entryError, false);
+    updateEntryClear();
+    ui.entryInput.focus();
+  });
+}
 
 ui.reviewsMore.addEventListener("click", () => {
   for (const review of hiddenReviews) ui.reviews.appendChild(reviewNode(review));
