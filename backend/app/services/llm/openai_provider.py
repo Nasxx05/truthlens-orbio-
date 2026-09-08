@@ -239,4 +239,36 @@ class OpenAIProvider(LLMProvider):
         try:
             return SummaryOutput.model_validate_json(content), None
         except Exception as error:
-            return None, f"model output did not match the expected shape: {error}"
+            # One retry, only for this specific failure (malformed/off-schema
+            # JSON) — not for auth/rate-limit/network errors above, which a
+            # retry cannot fix. Re-sends the same request with an explicit
+            # repair instruction.
+            logger.info("openai response did not match schema; retrying once with a repair hint")
+            retry = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT + schema_hint},
+                    {"role": "user", "content": user_prompt},
+                    {"role": "assistant", "content": content},
+                    {
+                        "role": "user",
+                        "content": (
+                            "That response did not match the required JSON schema "
+                            f"({error}). Return only valid JSON matching the schema, "
+                            "with no extra text."
+                        ),
+                    },
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=settings.llm_max_tokens,
+            )
+            retry_choices = getattr(retry, "choices", None) or []
+            if not retry_choices:
+                return None, f"model output did not match the expected shape: {error}"
+            retry_content = (getattr(retry_choices[0].message, "content", None) or "").strip()
+            try:
+                return SummaryOutput.model_validate_json(retry_content), "repaired after one retry"
+            except Exception as retry_error:
+                return None, (
+                    f"model output did not match the expected shape after retrying: {retry_error}"
+                )

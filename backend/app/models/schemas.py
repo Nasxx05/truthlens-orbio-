@@ -276,3 +276,13 @@ class AnalyzeResponse(BaseModel):
     description: Optional[str] = Field(
         None, description="Product description, scraped from the host page when available"
     )
+    partial: bool = Field(
+        False,
+        description=(
+            "True when a verdict was produced but a real source failed along the way "
+            "(a blocked scrape, a failed video platform, an LLM error) — see partial_reasons."
+        ),
+    )
+    partial_reasons: List[str] = Field(
+        default_factory=list, description="Why this result is partial, one reason per failed source"
+    )

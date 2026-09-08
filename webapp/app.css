@@ -237,29 +237,96 @@ h1 {
 
 /* -------------------------------------------------------------------- rail */
 
+/* The investigation trail. Built by JS from the backend's own stage list
+   (see app.js `buildRail`) — every row here mirrors a real checkpoint the
+   backend reported, never a timed animation. */
+
 .rail {
-  display: flex;
-  gap: 20px;
-  padding: 12px 24px;
+  display: block;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--line);
-  color: var(--muted);
   font-size: 11px;
 }
 
-.rail__step { display: flex; align-items: center; gap: 6px; }
-
-.rail__step i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--line);
-  transition: background 160ms ease;
+.rail__title {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-.rail__step[data-state="active"] i { background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
-.rail__step[data-state="done"]   i { background: var(--ok-fg); }
-.rail__step[data-state="done"]      { color: var(--fg-soft); }
-.rail__step[data-state="empty"] i  { background: var(--muted); opacity: 0.5; }
 
+.rail__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 18px;
+}
+
+.rail__step {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 2px 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.rail__icon {
+  flex: 0 0 auto;
+  width: 14px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.rail__text { display: flex; flex-direction: column; min-width: 0; }
+.rail__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail__detail {
+  color: var(--muted);
+  font-size: 10px;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail__step[data-state="pending"] .rail__icon { opacity: 0.4; }
+
+.rail__step[data-state="running"] { color: var(--fg); }
+.rail__step[data-state="running"] .rail__icon {
+  color: var(--accent);
+  animation: spin 1.1s linear infinite;
+  display: inline-block;
+}
+
+.rail__step[data-state="complete"] { color: var(--fg-soft); }
+.rail__step[data-state="complete"] .rail__icon { color: var(--ok-fg); }
+
+.rail__step[data-state="failed"] .rail__icon,
+.rail__step[data-state="failed"] .rail__detail { color: var(--bad-fg, #c0392b); }
+
+.rail__step[data-state="skipped"] { opacity: 0.6; }
+.rail__step[data-state="skipped"] .rail__icon { opacity: 0.5; }
+
+/* A small non-blocking notice shown when a verdict was produced but a real
+   source failed along the way — never covers up the results themselves. */
+.partial-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 24px 14px;
+  padding: 10px 12px;
+  background: var(--warn-bg, rgba(230, 162, 60, 0.12));
+  border: 1px solid var(--warn-fg, #e6a23c);
+  border-radius: 8px;
+  color: var(--fg);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.partial-banner__icon { flex: 0 0 auto; }
+.partial-banner__body strong { display: block; margin-bottom: 2px; }
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 /* --------------------------------------------------------------------- hero */
@@ -670,7 +737,17 @@ h1 {
 
 @media (prefers-reduced-motion: reduce) {
   .sk { animation: none; }
-  .rail__step[data-state="active"] i { animation: none; }
+  .rail__step[data-state="running"] .rail__icon { animation: none; }
+}
+
+/* Narrow viewports: the two-column investigation trail becomes one column,
+   and labels/detail text are allowed to wrap instead of ellipsizing, since
+   there is no adjacent column competing for width. */
+@media (max-width: 480px) {
+  .rail__list { grid-template-columns: 1fr; }
+  .rail__label, .rail__detail { white-space: normal; overflow: visible; text-overflow: unset; }
+  .hero { flex-wrap: wrap; }
+  .partial-banner { margin: 0 12px 14px; }
 }
 
 /* ------------------------------------------------------------------ footer */

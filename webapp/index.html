@@ -44,12 +44,21 @@
         </div>
       </section>
 
-      <!-- Investigation trail: one dot per real backend stage, filled as each arrives -->
+      <!-- Investigation trail: built by app.js from the backend's own stage
+           list (the `started` event's `investigation` field), so every row
+           reflects a real checkpoint the backend reported. -->
       <div class="rail" id="rail" hidden>
-        <span class="rail__step" data-step="product"><i></i>Identifying product</span>
-        <span class="rail__step" data-step="reviews"><i></i>Collecting &amp; filtering reviews</span>
-        <span class="rail__step" data-step="videos"><i></i>Cross-checking video evidence</span>
-        <span class="rail__step" data-step="summary"><i></i>Analyzing risk &amp; generating verdict</span>
+        <p class="rail__title">TrustLens investigation</p>
+        <div class="rail__list" id="rail-list"></div>
+      </div>
+
+      <!-- Non-blocking notice: a verdict was produced, but a real source failed. -->
+      <div class="partial-banner" id="partial-banner" hidden>
+        <span class="partial-banner__icon">⚠</span>
+        <span class="partial-banner__body">
+          <strong>Partial investigation</strong>
+          <span id="partial-banner-text"></span>
+        </span>
       </div>
 
       <main id="main">

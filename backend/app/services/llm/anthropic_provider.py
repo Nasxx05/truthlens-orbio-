@@ -84,26 +84,53 @@ class AnthropicProvider(LLMProvider):
         # default rather than this code silently choosing one.
         output_config = {"effort": settings.llm_effort} if settings.llm_effort else None
 
-        try:
-            kwargs = dict(
-                model=self._model,
-                max_tokens=settings.llm_max_tokens,
-                # The system prompt never varies, which makes it the one part of
-                # the request worth caching across products.
-                system=[
-                    {
-                        "type": "text",
-                        "text": SYSTEM_PROMPT,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ],
-                messages=[{"role": "user", "content": user_prompt}],
-                output_format=SummaryOutput,
-            )
-            if output_config:
-                kwargs["output_config"] = output_config
+        # One retry, specifically for a malformed/off-schema response — never
+        # for auth/rate-limit/network failures, which a retry cannot fix. The
+        # retry repeats the exact same request with one added instruction, so
+        # a model that ignored the schema once is told again, explicitly.
+        REPAIR_HINT = (
+            "\n\nYour previous response did not match the required JSON schema. "
+            "Return only valid JSON matching the schema, with no extra text."
+        )
+        attempt = 0
+        max_attempts = 2
 
-            response = await client.messages.parse(**kwargs)
+        try:
+            while True:
+                attempt += 1
+                prompt = user_prompt if attempt == 1 else user_prompt + REPAIR_HINT
+                kwargs = dict(
+                    model=self._model,
+                    max_tokens=settings.llm_max_tokens,
+                    # The system prompt never varies, which makes it the one part of
+                    # the request worth caching across products.
+                    system=[
+                        {
+                            "type": "text",
+                            "text": SYSTEM_PROMPT,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ],
+                    messages=[{"role": "user", "content": prompt}],
+                    output_format=SummaryOutput,
+                )
+                if output_config:
+                    kwargs["output_config"] = output_config
+
+                try:
+                    response = await client.messages.parse(**kwargs)
+                    break
+                except ValidationError as error:
+                    if attempt >= max_attempts:
+                        raise
+                    logger.info(
+                        "model output failed schema validation on attempt %s/%s; retrying with repair hint",
+                        attempt, max_attempts,
+                    )
+                    result.notes.append(
+                        f"first response did not match schema ({len(error.errors())} error(s)); retried once"
+                    )
+                    continue
 
             # A safety refusal arrives as HTTP 200 with stop_reason "refusal",
             # so checking status alone would read an empty response as success.
@@ -164,9 +191,13 @@ class AnthropicProvider(LLMProvider):
             # into an API response, and log it at info: it is a model
             # behaviour, not a bug in this service.
             count = len(error.errors())
-            logger.info("model output failed schema validation (%s error(s))", count)
+            logger.info(
+                "model output failed schema validation (%s error(s)) after %s attempt(s)",
+                count, attempt,
+            )
             result.error = (
-                f"model output did not match the requested schema ({count} validation error(s))"
+                f"model output did not match the requested schema after {attempt} attempt(s) "
+                f"({count} validation error(s))"
             )
         except Exception as error:
             # Never let summarization take down a request that already has

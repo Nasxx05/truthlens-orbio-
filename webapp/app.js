@@ -11,8 +11,10 @@
  * in this file — same rule as the extension.
  */
 
-// Points at the backend's stable Render URL.
-const API_BASE = "https://truthlens-orbio.onrender.com";
+// Points at the backend's stable Render URL. Overridable via
+// `window.__TRUSTLENS_API_BASE__` for local/automated testing only — never
+// set by this file itself, so production behavior is unchanged.
+const API_BASE = window.__TRUSTLENS_API_BASE__ || "https://truthlens-orbio.onrender.com";
 const STREAM_URL = `${API_BASE}/analyze/stream`;
 const ANALYZE_URL = `${API_BASE}/analyze`;
 
@@ -23,6 +25,53 @@ const RECENT_MAX = 6;
 const RECENT_KEY = "trustlens:recent";
 const PROMO_KEY = "trustlens:promo-dismissed";
 
+/**
+ * The investigation trail, mirrored from `INVESTIGATION_STAGES` in
+ * `backend/app/services/pipeline.py`. Used only to render the rail
+ * *before* the real `started` event arrives (so the shopper sees the full
+ * checklist immediately, all "pending") — the moment a real event lands,
+ * the rail is rebuilt from the backend's own `investigation` list, and every
+ * status change after that comes from a real `stage` SSE event. This
+ * constant is never used to fabricate progress on its own.
+ */
+const FALLBACK_STAGES = [
+  ["product_identification", "Product identified"],
+  ["product_info_collected", "Product information collected"],
+  ["reviews_collected", "Reviews collected"],
+  ["sentiment_analyzed", "Customer sentiment analyzed"],
+  ["pattern_analysis", "Checking recurring patterns"],
+  ["review_reliability", "Checking review reliability"],
+  ["external_research", "Searching external sources"],
+  ["claim_research", "Cross-checking product claims"],
+  ["evidence_synthesis", "Synthesizing evidence"],
+  ["trust_score", "Calculating Trust Score"],
+  ["verdict", "Generating verdict"],
+].map(([id, label]) => ({ id, label }));
+
+const STAGE_ICON = { pending: "○", running: "⟳", complete: "✓", failed: "✕", skipped: "–" };
+
+// Safe, user-facing copy keyed by the backend's error `code`. Mirrors
+// ERROR_COPY in backend/app/routes/analyze.py — never render a raw
+// exception or backend-internal string, only one of these.
+const ERROR_COPY = {
+  invalid_url: {
+    title: "Invalid product URL",
+    body: "That doesn't appear to be a valid product URL. Please enter a product page URL.",
+  },
+  unsupported_target: {
+    title: "Unsupported URL",
+    body: "TrustLens can't analyze that link. Please use a public product page URL.",
+  },
+  rate_limited: {
+    title: "Too many requests",
+    body: "TrustLens is receiving a lot of requests right now. Please wait a moment and try again.",
+  },
+  server_error: {
+    title: "Investigation failed",
+    body: "TrustLens couldn't complete the investigation. Please try again.",
+  },
+};
+
 const $ = (id) => document.getElementById(id);
 
 const ui = {
@@ -31,7 +80,11 @@ const ui = {
   productImage: $("product-image"),
 
   rail: $("rail"),
+  railList: $("rail-list"),
   main: $("main"),
+
+  partialBanner: $("partial-banner"),
+  partialBannerText: $("partial-banner-text"),
 
   promo: $("promo"),
   promoDismiss: $("promo-dismiss"),
@@ -126,9 +179,59 @@ function setBadge(text, kind) {
   show(ui.badge, true);
 }
 
-function setStep(step, state) {
-  const node = ui.rail.querySelector(`[data-step="${step}"]`);
-  if (node) node.dataset.state = state;
+/**
+ * (Re)build the investigation rail from a backend-supplied stage list.
+ *
+ * Every row starts "pending" — nothing here claims work has started. Status
+ * only ever changes in response to a real `stage` SSE event (see
+ * `applyEvent`'s "stage" case), never a timer.
+ */
+function buildRail(stages) {
+  if (!ui.railList) return;
+  ui.railList.replaceChildren(
+    ...stages.map(({ id, label }) => {
+      const row = document.createElement("div");
+      row.className = "rail__step";
+      row.dataset.step = id;
+      row.dataset.state = "pending";
+
+      const icon = document.createElement("span");
+      icon.className = "rail__icon";
+      icon.textContent = STAGE_ICON.pending;
+
+      const text = document.createElement("span");
+      text.className = "rail__text";
+      const labelEl = document.createElement("span");
+      labelEl.className = "rail__label";
+      labelEl.textContent = label;
+      const detailEl = document.createElement("span");
+      detailEl.className = "rail__detail";
+      detailEl.hidden = true;
+      text.append(labelEl, detailEl);
+
+      row.append(icon, text);
+      return row;
+    })
+  );
+}
+
+/** Apply a real stage update to one rail row. `status` drives the icon/color; `detail` is optional context (why a step failed or was skipped). */
+function setStep(stepId, status, detail) {
+  const node = ui.railList && ui.railList.querySelector(`[data-step="${stepId}"]`);
+  if (!node) return;
+  node.dataset.state = status;
+  const icon = node.querySelector(".rail__icon");
+  if (icon) icon.textContent = STAGE_ICON[status] || "○";
+  const detailEl = node.querySelector(".rail__detail");
+  if (detailEl) {
+    if (detail) {
+      detailEl.textContent = detail;
+      detailEl.title = detail;
+      detailEl.hidden = false;
+    } else {
+      detailEl.hidden = true;
+    }
+  }
 }
 
 /** Reset every section to its loading state, ready for a fresh analysis. */
@@ -138,7 +241,8 @@ function resetView() {
   hasPartialResults = false;
 
   show(ui.rail, true);
-  for (const step of ["product", "reviews", "videos", "summary"]) setStep(step, "active");
+  buildRail(FALLBACK_STAGES);
+  show(ui.partialBanner, false);
 
   show(ui.stateError, false);
   show(ui.stateThin, false);
@@ -194,6 +298,7 @@ function resetView() {
 
 function hideResults() {
   show(ui.rail, false);
+  show(ui.partialBanner, false);
   show(ui.secHero, false);
   show(ui.secSummary, false);
   show(ui.secBreakdown, false);
@@ -215,6 +320,18 @@ function fail(title, body, hint) {
     show(ui.errorHint, false);
   }
   show(ui.stateError, true);
+  show(ui.retry, true);
+}
+
+/** Non-blocking notice: a verdict was produced, but a real source failed along the way. */
+function showPartialBanner(reasons) {
+  const detail = (reasons || []).length
+    ? ` ${reasons.join("; ")}.`
+    : "";
+  ui.partialBannerText.textContent =
+    "Review analysis completed, but some external evidence was unavailable. " +
+    "TrustLens reduced confidence accordingly." + detail;
+  show(ui.partialBanner, true);
 }
 
 /* ---------------------------------------------------------------- recents */
@@ -489,8 +606,6 @@ function renderReasons(buy, thinkTwice) {
 }
 
 function renderSummary(summary, llm) {
-  setStep("summary", "done");
-
   const hasContent =
     summary && (summary.verdict || (summary.pros || []).length || (summary.cons || []).length);
 
@@ -498,7 +613,6 @@ function renderSummary(summary, llm) {
   renderBreakdown(summary && summary.score_breakdown);
 
   if (!hasContent) {
-    setStep("summary", "empty");
     ui.summaryEmpty.textContent =
       llm && llm.error
         ? `No verdict: ${llm.error}`
@@ -632,7 +746,6 @@ function renderReviews(event) {
     : "";
 
   if (!evidence.length) {
-    setStep("reviews", "empty");
     ui.reviewsEmpty.textContent = total
       ? "No reviews survived filtering, so none are shown as evidence."
       : "No reviews were found for this product.";
@@ -640,7 +753,6 @@ function renderReviews(event) {
     return;
   }
 
-  setStep("reviews", "done");
   const first = evidence.slice(0, REVIEWS_SHOWN);
   hiddenReviews = evidence.slice(REVIEWS_SHOWN);
 
@@ -695,7 +807,6 @@ function videoNode(video) {
 function appendVideos(videos) {
   if (!videos || !videos.length) return;
   show(ui.videos, true);
-  setStep("videos", "done");
   for (const video of videos) ui.videos.appendChild(videoNode(video));
   ui.videosCount.textContent = `${ui.videos.children.length} found`;
 }
@@ -703,7 +814,6 @@ function appendVideos(videos) {
 function finishVideos(videoSources) {
   if (ui.videos.children.length) return;
 
-  setStep("videos", "empty");
   const blocked = (videoSources || []).filter((source) => source.blocked || source.error);
   const notes = (videoSources || []).flatMap((source) => source.notes || []);
   ui.videosEmpty.textContent =
@@ -715,11 +825,6 @@ function finishVideos(videoSources) {
 }
 
 function renderDone(event) {
-  // A verdict — with trust score and star rating — is always produced now,
-  // even from video evidence or general knowledge when there are no
-  // reviews, so a low review count is not "not enough data" anymore. Each
-  // section (reviews/summary/videos) already renders its own final state;
-  // no separate blocking banner is shown on top of it.
   setBadge("done", "ok");
 
   const parts = [];
@@ -728,17 +833,47 @@ function renderDone(event) {
   ui.footMeta.textContent = parts.join(" · ");
 
   finishVideos(event.video_sources);
+
+  if (event.status === "not_enough_data" && !hasPartialResults) {
+    // Truly nothing useful was produced — no reviews, no videos, no verdict.
+    // This is the one case that blocks the results area, using the exact
+    // "insufficient data" copy a shopper needs to understand why.
+    hideResults();
+    setBadge("insufficient data", "warn");
+    if (ui.thinTitle) ui.thinTitle.textContent = "Not enough data";
+    ui.thinBody.textContent =
+      "There isn't enough review evidence to produce a reliable verdict." +
+      (event.message ? ` ${event.message}` : "");
+    show(ui.stateThin, true);
+    show(ui.retry, true);
+  } else if (event.status === "not_enough_data") {
+    // Some real evidence did render (e.g. a fallback verdict from video
+    // commentary) even though reviews were thin — say so without hiding it.
+    showPartialBanner([event.message].filter(Boolean));
+  } else if (event.partial) {
+    showPartialBanner(event.partial_reasons);
+  }
 }
 
 /* ------------------------------------------------------------------ backend */
 
 function applyEvent(event) {
-  diagnostics[event.event === "videos" ? `videos:${event.source}` : event.event] = event;
+  const diagKey =
+    event.event === "videos" ? `videos:${event.source}`
+    : event.event === "stage" ? `stage:${event.id}`
+    : event.event;
+  diagnostics[diagKey] = event;
 
   switch (event.event) {
     case "started":
       setBadge("analyzing", "pending");
-      setStep("product", "done");
+      if (Array.isArray(event.investigation) && event.investigation.length) {
+        buildRail(event.investigation);
+      }
+      break;
+    case "stage":
+      // The one and only source of rail progress: a real backend checkpoint.
+      setStep(event.id, event.status, event.detail);
       break;
     case "source":
       // Progress only — reviews themselves arrive once filtered.
@@ -755,24 +890,44 @@ function applyEvent(event) {
       break;
     case "reviews":
       renderReviews(event);
-      hasPartialResults = true;
+      // Only real evidence counts — an empty reviews list is not "results
+      // already showing", it's the same "nothing found" case as no event
+      // at all, and should still be eligible for the blocking insufficient-
+      // data state below rather than a banner over empty sections.
+      if ((event.reviews_passed || 0) > 0) hasPartialResults = true;
       break;
     case "videos":
       appendVideos(event.videos);
-      hasPartialResults = true;
+      if ((event.videos || []).length > 0) hasPartialResults = true;
       break;
-    case "summary":
+    case "summary": {
       renderSummary(event.summary, event.llm);
-      hasPartialResults = true;
+      const summary = event.summary || {};
+      if (summary.verdict || (summary.pros || []).length || (summary.cons || []).length) {
+        hasPartialResults = true;
+      }
       break;
+    }
     case "match":
       break;
     case "done":
       renderDone(event);
       break;
-    case "error":
-      fail("Analysis failed", event.message || "The backend reported an error.");
+    case "error": {
+      const copy = ERROR_COPY[event.code] || null;
+      if (hasPartialResults) {
+        // Evidence already rendered successfully before this failed — keep
+        // it visible and say so, rather than replacing it with a scary error.
+        showPartialBanner([copy ? copy.body : "The investigation could not finish."]);
+      } else {
+        hideResults();
+        fail(
+          copy ? copy.title : "Investigation failed",
+          copy ? copy.body : "TrustLens couldn't complete the investigation. Please try again."
+        );
+      }
       break;
+    }
     default:
       break;
   }
@@ -814,11 +969,21 @@ async function runStream(body, signal) {
     for (const frame of frames) {
       const line = frame.split("\n").find((l) => l.startsWith("data:"));
       if (!line) continue;
+      let parsed;
       try {
-        applyEvent(JSON.parse(line.slice(5).trim()));
+        parsed = JSON.parse(line.slice(5).trim());
         sawEvent = true;
       } catch (error) {
         console.debug("[TrustLens] unparseable event frame", error);
+        continue;
+      }
+      // A render bug on one event must not abort the whole stream — the
+      // remaining, still-arriving events (including the real `done`/`error`)
+      // deserve a chance to render too.
+      try {
+        applyEvent(parsed);
+      } catch (error) {
+        console.error("[TrustLens] failed to apply event", parsed && parsed.event, error);
       }
     }
   }
@@ -835,17 +1000,24 @@ async function runOnce(body, signal) {
   });
 
   if (!response.ok) {
-    let detail = "";
+    let detail = null;
     try {
-      detail = JSON.stringify((await response.json()).detail);
+      detail = (await response.json()).detail;
     } catch {
       /* no JSON body */
     }
-    throw new Error(`Backend returned HTTP ${response.status}${detail ? `\n\n${detail}` : ""}`);
+    const error = new Error(
+      (detail && detail.message) || `Backend returned HTTP ${response.status}`
+    );
+    if (detail && detail.code) error.code = detail.code;
+    else if (response.status === 429) error.code = "rate_limited";
+    else if (response.status >= 500) error.code = "server_error";
+    throw error;
   }
 
   const data = await response.json();
-  setStep("product", "done");
+  buildRail(FALLBACK_STAGES);
+  for (const stageEvent of deriveStageEvents(data)) applyEvent(stageEvent);
   if (data.image_url && ui.productImage) {
     ui.productImage.src = data.image_url;
     show(ui.productImage, true);
@@ -856,14 +1028,63 @@ async function runOnce(body, signal) {
   applyEvent({ event: "videos", source: "all", videos: data.videos, report: {} });
   applyEvent({ event: "done", status: data.status, message: data.message,
                contributed: data.contributed, video_sources: data.video_sources,
-               duration_ms: (data.llm || {}).duration_ms });
+               duration_ms: (data.llm || {}).duration_ms,
+               partial: data.partial, partial_reasons: data.partial_reasons });
+}
+
+/**
+ * Derive investigation-rail statuses from a *finished* single-response
+ * result (used only by the non-streaming fallback, where there is no live
+ * stage event). Mirrors `_cached_stage_events` in
+ * `backend/app/routes/analyze.py` — every status below reads a field the
+ * backend actually returned, never a guess or a timer.
+ */
+function deriveStageEvents(data) {
+  const summary = data.summary || {};
+  const reviews = data.reviews || [];
+  const reviewsPassed = data.reviews_passed || 0;
+  const sources = data.sources || [];
+  const host = sources.find((s) => s.source && s.source !== "competitor") || {};
+  const attemptedCompetitor = sources.some((s) => s.source === "competitor");
+  const videosPresent = (data.videos || []).length > 0;
+  const hasVerdict = Boolean(summary.verdict);
+
+  const events = [{ event: "stage", id: "product_identification", status: "complete" }];
+  events.push({
+    event: "stage", id: "product_info_collected",
+    status: "complete",
+    detail: host.image_url || host.description ? "Image and/or description found" : "No image or description found",
+  });
+  events.push({
+    event: "stage", id: "reviews_collected",
+    status: reviewsPassed ? "complete" : "failed",
+    detail: `${reviewsPassed} of ${reviews.length} review(s) passed filtering`,
+  });
+  events.push({ event: "stage", id: "sentiment_analyzed", status: reviews.length ? "complete" : "skipped" });
+  events.push({ event: "stage", id: "pattern_analysis", status: reviews.length ? "complete" : "skipped" });
+  events.push({ event: "stage", id: "review_reliability", status: summary.review_risk ? "complete" : "skipped" });
+  events.push({
+    event: "stage", id: "external_research",
+    status: !attemptedCompetitor && !videosPresent ? "skipped" : (videosPresent || attemptedCompetitor ? "complete" : "failed"),
+  });
+  events.push({ event: "stage", id: "claim_research", status: summary.claim_check ? "complete" : "skipped" });
+  events.push({ event: "stage", id: "evidence_synthesis", status: hasVerdict ? "complete" : "failed" });
+  events.push({ event: "stage", id: "trust_score", status: hasVerdict ? "complete" : "failed" });
+  events.push({ event: "stage", id: "verdict", status: hasVerdict ? "complete" : "failed" });
+  return events;
 }
 
 function explainNetwork(error) {
+  // A rejection from runOnce carries a backend error `code` — always prefer
+  // the canned copy for that code over guessing from the error's shape.
+  if (error.code && ERROR_COPY[error.code]) {
+    return [ERROR_COPY[error.code].title, ERROR_COPY[error.code].body, null];
+  }
   if (error.name === "AbortError") {
     return [
       "Request timed out",
-      `The backend did not finish within ${REQUEST_TIMEOUT_MS / 1000}s.`,
+      `The backend did not finish within ${REQUEST_TIMEOUT_MS / 1000}s. This can happen on a ` +
+        "cold backend instance — trying again usually finishes faster.",
       null,
     ];
   }
@@ -877,7 +1098,11 @@ function explainNetwork(error) {
       "uvicorn app.main:app --reload --port 8000",
     ];
   }
-  return ["Analysis failed", error.message, null];
+  return [
+    "Investigation failed",
+    "TrustLens couldn't complete the investigation. Please try again.",
+    null,
+  ];
 }
 
 /* --------------------------------------------------------------------- flow */
@@ -916,9 +1141,14 @@ async function analyze(body) {
 function parseEntry(value) {
   try {
     const parsed = new URL(value);
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") return { url: value };
+    // Anything that parses as a URL at all is treated as a URL, even with
+    // an unsupported scheme (ftp://, javascript:, etc.) — sending it to the
+    // backend gets back the real "invalid URL" rejection with the exact
+    // reason, instead of silently reinterpreting it as a product-name
+    // search that can never usefully match anything.
+    return { url: value, scheme: parsed.protocol.replace(":", "") };
   } catch {
-    /* not a URL */
+    /* not a URL at all — a bare product name */
   }
   return { name: value };
 }
@@ -989,6 +1219,14 @@ renderRecent();
 hideResults();
 show(ui.retry, false);
 show(ui.debugToggle, false);
+
+// Fire-and-forget: start waking a cold Render instance the moment the page
+// loads, before the shopper has finished typing/pasting a URL. This is a
+// real request with a real effect on the eventual /analyze latency — not a
+// fabricated progress signal, and nothing renders from its result.
+fetch(`${API_BASE}/health`, { method: "GET" }).catch(() => {
+  /* if the backend is unreachable, the real analyze call will say so */
+});
 
 // Bootstrap from a shared link: ?url=<product url> or ?q=<product name>.
 const initial = new URLSearchParams(window.location.search);

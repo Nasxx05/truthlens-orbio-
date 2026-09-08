@@ -12,6 +12,7 @@ import time
 import uuid
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -95,10 +96,13 @@ async def guard(request: Request, call_next):
             return JSONResponse(
                 status_code=429,
                 content={
-                    "detail": (
-                        f"rate limit exceeded ({verdict.limit} requests per "
-                        f"{settings.rate_limit_window}s)"
-                    )
+                    "detail": {
+                        "code": "rate_limited",
+                        "message": (
+                            "TrustLens is receiving a lot of requests right now. "
+                            "Please wait a moment and try again."
+                        ),
+                    }
                 },
                 headers={
                     "Retry-After": str(verdict.retry_after),
@@ -166,6 +170,28 @@ async def shutdown() -> None:
 
 
 app.include_router(analyze.router, tags=["analyze"])
+
+
+@app.exception_handler(RequestValidationError)
+async def on_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Replace pydantic's raw validation dump with the same safe shape every
+    other rejection uses — never echo the caller's body back to them, and
+    never show a stack of field-path jargon for what is, on this endpoint,
+    always the same real problem: no product URL or name was supplied.
+    """
+    logger.info(
+        "request validation failed",
+        extra={"event_type": "validation_error", "path": request.url.path},
+    )
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": {
+                "code": "invalid_url",
+                "message": "That doesn't appear to be a valid product URL. Please enter a product URL or name.",
+            }
+        },
+    )
 
 
 @app.get("/health")

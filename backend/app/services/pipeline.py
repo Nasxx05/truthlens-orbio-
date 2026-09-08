@@ -27,6 +27,40 @@ from app.services.summarize import SummaryBundle, summarize_reviews
 logger = logging.getLogger(__name__)
 
 
+# The investigation trail shown in the UI, in order. This is the single
+# source of truth for stage ids/labels — the frontend renders whatever the
+# backend sends in the `started` event's `investigation` list rather than
+# keeping its own hardcoded copy, so the rail can never drift from what the
+# backend actually does. Every id below is backed by a real computation
+# already happening elsewhere in this module or in `summarize.py`/`risk.py` —
+# none of these represent work that doesn't otherwise occur.
+INVESTIGATION_STAGES = [
+    ("product_identification", "Product identified"),
+    ("product_info_collected", "Product information collected"),
+    ("reviews_collected", "Reviews collected"),
+    ("sentiment_analyzed", "Customer sentiment analyzed"),
+    ("pattern_analysis", "Checking recurring patterns"),
+    ("review_reliability", "Checking review reliability"),
+    ("external_research", "Searching external sources"),
+    ("claim_research", "Cross-checking product claims"),
+    ("evidence_synthesis", "Synthesizing evidence"),
+    ("trust_score", "Calculating Trust Score"),
+    ("verdict", "Generating verdict"),
+]
+
+
+def _stage(stage_id: str, status: str, detail: Optional[str] = None) -> dict:
+    """One investigation-trail update.
+
+    ``status`` is one of ``running | complete | failed | skipped``. Every
+    call site passes a ``detail`` derived from real data already collected —
+    never a placeholder — so the UI can show *why* a step failed or was
+    skipped instead of just a red mark.
+    """
+    label = dict(INVESTIGATION_STAGES).get(stage_id, stage_id)
+    return {"event": "stage", "id": stage_id, "label": label, "status": status, "detail": detail}
+
+
 def _explain(host_report: Optional[dict], total: int, minimum: int, filtered_out: int) -> str:
     """Say why the review set is too thin to work with."""
     if total > 0 and filtered_out and total < minimum:
@@ -93,8 +127,21 @@ async def analyze_stream(
     yield {
         "event": "started",
         "stages": ["reviews", "videos", "summary"],
+        "investigation": [{"id": sid, "label": label} for sid, label in INVESTIGATION_STAGES],
         "product": {"name": product_name, "url": product_url, "id": product_id},
     }
+
+    # Identification happens synchronously above (from the URL/name the
+    # caller supplied), so it is already complete by the time anything else
+    # can run. The next few stages begin the instant source collection
+    # starts, below.
+    yield _stage(
+        "product_identification", "complete",
+        detail=product_name or product_url or "identified from request",
+    )
+    yield _stage("product_info_collected", "running")
+    yield _stage("reviews_collected", "running")
+    yield _stage("external_research", "running")
 
     review_sources: List[dict] = []
     video_sources: List[dict] = []
@@ -102,6 +149,7 @@ async def analyze_stream(
     host_report: Optional[dict] = None
     host_result = None
     competitor_result = None
+    competitor_report: Optional[dict] = None
 
     # Videos are deliberately absent from this set: reviews must never be
     # gated on a video platform answering.
@@ -198,10 +246,85 @@ async def analyze_stream(
             "sources": list(review_sources),
         }
 
+    def review_stage_events() -> List[dict]:
+        """Investigation-trail checkpoints backed by the filtering just run.
+
+        Sentiment and pattern signals are computed by the fake-review filter
+        itself (``app.services.nlp.filter``) independently of the LLM, so
+        these are real checkpoints over work already done — not new
+        detection logic and not gated on summarization.
+        """
+        events = [
+            _stage(
+                "reviews_collected", "complete",
+                detail=(
+                    f"{passed_count} of {len(reviews)} review(s) passed filtering"
+                    if reviews else "No reviews were found for this product"
+                ),
+            )
+        ]
+        if not reviews:
+            events.append(_stage("sentiment_analyzed", "skipped", detail="No reviews to analyze"))
+            events.append(_stage("pattern_analysis", "skipped", detail="No reviews to analyze"))
+        else:
+            events.append(
+                _stage("sentiment_analyzed", "complete",
+                       detail=f"Sentiment signals scored across {len(reviews)} review(s)")
+            )
+            if filter_report:
+                clusters = len(filter_report.get("duplicate_clusters") or [])
+                events.append(
+                    _stage(
+                        "pattern_analysis", "complete",
+                        detail=(
+                            f"{clusters} duplicate-phrasing cluster(s) found"
+                            if clusters else "No duplicate-phrasing or submission-timing clusters found"
+                        ),
+                    )
+                )
+            else:
+                events.append(_stage("pattern_analysis", "skipped", detail="Pattern filtering is disabled"))
+        return events
+
+    def external_research_event() -> dict:
+        """Whether the competitor cross-check and/or video search turned up anything.
+
+        "External sources" here means the real work this service does today:
+        a second retailer carrying the same product, and video platforms —
+        not a general web search, which this service does not perform.
+        """
+        attempted_competitor = "competitor" in expected_review_sources
+        attempted_video = len(video_sources) > 0
+
+        if not attempted_competitor and not attempted_video:
+            return _stage(
+                "external_research", "skipped",
+                detail="No product name was available to search a competitor site or video platforms.",
+            )
+
+        parts: List[str] = []
+        if attempted_competitor:
+            if competitor_report and competitor_report.get("count"):
+                parts.append(f"{competitor_report['count']} review(s) from {competitor_report.get('source')}")
+            elif competitor_report and competitor_report.get("blocked"):
+                parts.append(f"{competitor_report.get('source')} blocked the cross-check")
+            elif competitor_report:
+                parts.append(f"{competitor_report.get('source')} carried no matching reviews")
+
+        total_videos = sum((v.get("count") or 0) for v in video_sources)
+        if total_videos:
+            parts.append(f"{total_videos} video(s) across {len(video_sources)} platform(s)")
+        elif attempted_video:
+            parts.append("no review videos found on the platforms checked")
+
+        succeeded = bool((competitor_report and competitor_report.get("count")) or total_videos)
+        return _stage("external_research", "complete" if succeeded else "failed", detail="; ".join(parts) or None)
+
     sources_task = asyncio.create_task(pump_sources())
     summary_task = None
     summary_bundle = None
     sources_done = False
+    external_stage_emitted = False
     reviews_emitted = False
     surviving: List[dict] = []
     failure: Optional[str] = None
@@ -250,6 +373,46 @@ async def analyze_stream(
                     "llm": summary_bundle.to_meta_dict(),
                 }
 
+                risk = summary_bundle.review_risk or {}
+                if risk.get("score") is None:
+                    yield _stage(
+                        "review_reliability", "skipped",
+                        detail=risk.get("note") or "Not enough data to assess review reliability",
+                    )
+                else:
+                    yield _stage(
+                        "review_reliability", "complete",
+                        detail=f"{risk.get('level')} risk ({len(risk.get('signals') or [])} signal(s) observed)",
+                    )
+
+                if summary_bundle.summary is None:
+                    reason = summary_bundle.meta.error or "No verdict could be produced from the available evidence."
+                    yield _stage("claim_research", "skipped", detail=reason)
+                    yield _stage("evidence_synthesis", "failed", detail=reason)
+                    yield _stage("trust_score", "failed", detail=reason)
+                    yield _stage("verdict", "failed", detail=reason)
+                else:
+                    output = summary_bundle.summary
+                    if output.claim_check:
+                        yield _stage("claim_research", "complete", detail=output.claim_check)
+                    else:
+                        yield _stage(
+                            "claim_research", "skipped",
+                            detail="No product description was available to cross-check against reviews.",
+                        )
+                    yield _stage(
+                        "evidence_synthesis", "complete",
+                        detail=(
+                            f"{len(output.pros)} pro point(s), {len(output.cons)} con point(s) identified"
+                            if (output.pros or output.cons) else "Limited evidence synthesized"
+                        ),
+                    )
+                    yield _stage(
+                        "trust_score", "complete",
+                        detail=f"{output.trust_score}/100 ({output.confidence} confidence)",
+                    )
+                    yield _stage("verdict", "complete", detail=output.verdict or None)
+
             elif kind == "collected":
                 source_kind, value = payload
 
@@ -262,10 +425,33 @@ async def analyze_stream(
                     review_sources.append(host_report)
                     seen_review_sources.add("host")
                     yield {"event": "source", "kind": "host", "report": host_report}
+                    if host_report.get("blocked"):
+                        yield _stage(
+                            "product_info_collected", "failed",
+                            detail=f"{host_report.get('source')} blocked the request",
+                        )
+                    elif host_report.get("image_url") or host_report.get("description"):
+                        yield _stage("product_info_collected", "complete", detail="Image and/or description found")
+                    elif not product_url:
+                        yield _stage(
+                            "product_info_collected", "skipped",
+                            detail="No product URL was supplied, so there was no page to read",
+                        )
+                    elif host_report.get("error"):
+                        yield _stage(
+                            "product_info_collected", "failed",
+                            detail=host_report["error"],
+                        )
+                    else:
+                        yield _stage(
+                            "product_info_collected", "complete",
+                            detail="Product page reached; no image or description found",
+                        )
 
                 elif source_kind == "competitor":
                     competitor_result, verdict, matched = value
                     report = competitor_result.to_dict()
+                    competitor_report = report
                     review_sources.append(report)
                     seen_review_sources.add("competitor")
                     yield {"event": "source", "kind": "competitor", "report": report}
@@ -296,6 +482,8 @@ async def analyze_stream(
             if not reviews_emitted and seen_review_sources >= expected_review_sources:
                 surviving = run_filter()
                 yield reviews_event()
+                for stage_event in review_stage_events():
+                    yield stage_event
                 reviews_emitted = True
                 if surviving:
                     # Real review evidence: summarize now, in parallel with
@@ -308,10 +496,16 @@ async def analyze_stream(
             # Every source has finished, including videos: if nothing started
             # the summary above (no surviving reviews), fall back to whatever
             # video evidence was found rather than skipping the stage in silence.
+            if sources_done and not external_stage_emitted:
+                yield external_research_event()
+                external_stage_emitted = True
+
             if summary_task is None and sources_done:
                 if not reviews_emitted:
                     surviving = run_filter()
                     yield reviews_event()
+                    for stage_event in review_stage_events():
+                        yield stage_event
                     reviews_emitted = True
                 else:
                     surviving = []
@@ -352,6 +546,23 @@ async def analyze_stream(
         "yes" if (summary_bundle and summary_bundle.summary) else "no", duration_ms,
     )
 
+    # Partial: real evidence was produced, but some real source failed along
+    # the way. Computed here from the same reports the UI already carries —
+    # never inferred from timing or guessed.
+    partial_reasons: List[str] = []
+    if enough:
+        for report in review_sources:
+            if report.get("source") != (host_report or {}).get("source") and (report.get("blocked") or report.get("error")):
+                partial_reasons.append(f"{report.get('source')} reviews were unavailable ({report.get('error') or 'blocked'})")
+        if (host_report or {}).get("blocked") or (host_report or {}).get("error"):
+            partial_reasons.append(f"{(host_report or {}).get('source')} partially blocked review collection")
+        for vreport in video_sources:
+            if vreport.get("error"):
+                partial_reasons.append(f"{vreport.get('source')} video search failed ({vreport['error']})")
+        if summary_bundle and not summary_bundle.meta.ok and summary_bundle.summary is None:
+            partial_reasons.append(summary_bundle.meta.error or "AI summarization was unavailable")
+    partial = enough and bool(partial_reasons)
+
     yield {
         "event": "done",
         "status": status,
@@ -362,6 +573,8 @@ async def analyze_stream(
         "duration_ms": duration_ms,
         "image_url": (host_report or {}).get("image_url"),
         "description": (host_report or {}).get("description"),
+        "partial": partial,
+        "partial_reasons": partial_reasons,
     }
 
 
@@ -391,6 +604,8 @@ async def analyze_once(**kwargs) -> Dict:
         "message": None,
         "image_url": None,
         "description": None,
+        "partial": False,
+        "partial_reasons": [],
     }
 
     async for event in analyze_stream(**kwargs):
@@ -413,6 +628,8 @@ async def analyze_once(**kwargs) -> Dict:
             assembled["videos"] = event["videos"]
             assembled["image_url"] = event.get("image_url")
             assembled["description"] = event.get("description")
+            assembled["partial"] = event.get("partial", False)
+            assembled["partial_reasons"] = event.get("partial_reasons", [])
         elif name == "error":
             assembled["status"] = "error"
             assembled["message"] = event.get("message")
