@@ -120,6 +120,16 @@ class SummaryOutput(BaseModel):
             "when no description was given rather than guessing."
         ),
     )
+    evidence: List["EvidenceOutput"] = Field(
+        default_factory=list,
+        description=(
+            "3-8 structured, traceable findings — the evidence layer behind pros/cons. "
+            "Each one grounded in the supplied reviews (and, for claim_conflict, the "
+            "supplied product description). Do not restate every pro/con as an "
+            "evidence item; pick the notable, specific findings a shopper would want "
+            "traced back to real counts."
+        ),
+    )
 
 
 class ThemeOutput(BaseModel):
@@ -131,6 +141,68 @@ class ThemeOutput(BaseModel):
     )
     mention_count: int = Field(
         0, description="Roughly how many of the supplied reviews raised this topic"
+    )
+
+
+class EvidenceOutput(BaseModel):
+    """One structured, traceable finding — the evidence layer behind the score.
+
+    This replaces free-text pros/cons as the primary "why" behind the trust
+    score: each item is countable and typed, so a shopper (and the scoring
+    code) can see exactly what it rests on. ``severity`` and the mention
+    counts are inputs to a deterministic point calculation done in
+    ``app.services.scoring`` — this model never states the score impact
+    itself, since a model's own point value would be exactly the kind of
+    unaudited number this feature exists to replace.
+    """
+
+    category: str = Field(
+        ..., description="Short topic name, e.g. 'Battery performance', 'Sound quality'"
+    )
+    type: str = Field(
+        ...,
+        description=(
+            "'evidence' (supports trust — a concrete strength reviewers confirm), "
+            "'concern' (undermines trust — a concrete, recurring problem), or "
+            "'claim_conflict' (the product description/manufacturer claim and what "
+            "reviewers actually report disagree). Use claim_conflict only when a "
+            "product description was supplied."
+        ),
+    )
+    explanation: str = Field(
+        ..., description="One grounded sentence: what was found and why it matters."
+    )
+    review_mentions: int = Field(
+        0, description="How many of the supplied reviews raise this point. Count honestly; do not round up."
+    )
+    external_mentions: int = Field(
+        0,
+        description=(
+            "How many independent, non-review sources (competitor listing, video "
+            "commentary) corroborate this point. 0 if none do — do not guess."
+        ),
+    )
+    claim_text: Optional[str] = Field(
+        None, description="Only for claim_conflict: the manufacturer/listing claim, quoted or closely paraphrased."
+    )
+    observed_reality: Optional[str] = Field(
+        None, description="Only for claim_conflict: what reviewers actually report, in contrast to claim_text."
+    )
+    severity: float = Field(
+        0.5,
+        description=(
+            "How much this single finding should matter, 0.0-1.0, independent of "
+            "sign — 1.0 is a major, consistently-reported point; 0.2 is a minor or "
+            "isolated one. This is a relative weight, not a points value."
+        ),
+    )
+    impact_points: Optional[int] = Field(
+        None,
+        description=(
+            "Signed trust-score impact, e.g. -7. Never set by the model — always "
+            "None here; app.services.scoring fills this in deterministically from "
+            "severity and the mention counts, after the fact."
+        ),
     )
 
 

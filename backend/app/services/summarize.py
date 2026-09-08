@@ -42,6 +42,7 @@ class SummaryBundle:
     adjustments: List[str] = field(default_factory=list)
     review_risk: Optional[dict] = None
     score_breakdown: Optional[dict] = None
+    evidence: List[dict] = field(default_factory=list)
     recommendation: str = "INSUFFICIENT_DATA"
 
     def to_meta_dict(self) -> dict:
@@ -259,21 +260,43 @@ async def summarize_reviews(
     bundle.summary = summary
     bundle.adjustments = adjustments
 
+    review_count = result.reviews_used or len(reviews)
+    competitor_present = "competitor" in sources
+
+    # Evidence items are converted to plain dicts up front: scoring mutates
+    # them in place (adding impact_points), and the response carries these
+    # dicts directly rather than re-wrapping them in the LLM-facing model.
+    evidence = [item.model_dump() for item in summary.evidence]
+
+    breakdown = compute_score_breakdown(
+        reviews=reviews,
+        review_risk=review_risk,
+        evidence=evidence,
+        ratings_by_source=ratings,
+        video_count=len(video_evidence or []) if not reviews else 0,
+        competitor_present=competitor_present,
+        source_count=len(sources),
+        claim_attempted=bool(request.product_description),
+    )
+    bundle.score_breakdown = breakdown
+    bundle.evidence = evidence
+
+    # The trust score is the weighted signal breakdown above, not the
+    # model's own number — same reasoning as the confidence ceiling: a
+    # score has to be auditable, not just plausible-sounding. Record the
+    # override when it's a real correction, same as any other adjustment.
+    model_score = summary.trust_score
+    summary.trust_score = breakdown["overall"]
+    if abs(model_score - breakdown["overall"]) >= 10:
+        adjustments.append(
+            f"trust_score recomputed from named signals: {model_score} (model) -> "
+            f"{breakdown['overall']} (weighted breakdown)"
+        )
+    summary.star_rating = max(0.0, min(5.0, round(breakdown["overall"] / 100 * 5 * 2) / 2))
+
     if adjustments:
         logger.info("summary adjusted: %s", "; ".join(adjustments))
 
-    review_count = result.reviews_used or len(reviews)
-    competitor_present = "competitor" in sources
-    bundle.score_breakdown = compute_score_breakdown(
-        trust_score=summary.trust_score,
-        confidence=summary.confidence,
-        review_count=review_count,
-        source_count=len(sources),
-        ratings_by_source=ratings,
-        review_risk=review_risk,
-        video_count=len(video_evidence or []) if not reviews else 0,
-        competitor_present=competitor_present,
-    )
     bundle.recommendation = compute_recommendation(
         trust_score=summary.trust_score,
         confidence=summary.confidence,

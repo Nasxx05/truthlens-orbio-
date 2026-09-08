@@ -210,7 +210,11 @@ class OpenAIProvider(LLMProvider):
             '"trust_score": integer 0-100, "star_rating": number 0-5 in steps of 0.5, '
             '"themes": [{"label": string, "sentiment": "positive"|"negative"|"mixed", '
             '"mention_count": integer}], "reasons_to_buy": [string], '
-            '"reasons_to_think_twice": [string], "claim_check": string or null}'
+            '"reasons_to_think_twice": [string], "claim_check": string or null, '
+            '"evidence": [{"category": string, "type": "evidence"|"concern"|"claim_conflict", '
+            '"explanation": string, "review_mentions": integer, "external_mentions": integer, '
+            '"claim_text": string or null, "observed_reality": string or null, '
+            '"severity": number 0.0-1.0}]}'
         )
         response = await client.chat.completions.create(
             model=model,

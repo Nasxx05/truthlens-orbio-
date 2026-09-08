@@ -349,6 +349,7 @@ async def analyze_stream(
                     "claim_check": None,
                     "review_risk": summary_bundle.review_risk,
                     "score_breakdown": summary_bundle.score_breakdown,
+                    "evidence": summary_bundle.evidence,
                 }
                 if summary_bundle.summary is not None:
                     summary = {
@@ -366,6 +367,7 @@ async def analyze_stream(
                         "claim_check": summary_bundle.summary.claim_check,
                         "review_risk": summary_bundle.review_risk,
                         "score_breakdown": summary_bundle.score_breakdown,
+                        "evidence": summary_bundle.evidence,
                     }
                 yield {
                     "event": "summary",
@@ -400,16 +402,21 @@ async def analyze_stream(
                             "claim_research", "skipped",
                             detail="No product description was available to cross-check against reviews.",
                         )
+                    evidence_items = summary_bundle.evidence or []
+                    concerns = sum(1 for item in evidence_items if item.get("type") == "concern")
+                    conflicts = sum(1 for item in evidence_items if item.get("type") == "claim_conflict")
                     yield _stage(
                         "evidence_synthesis", "complete",
                         detail=(
-                            f"{len(output.pros)} pro point(s), {len(output.cons)} con point(s) identified"
-                            if (output.pros or output.cons) else "Limited evidence synthesized"
+                            f"{len(evidence_items)} evidence item(s) found "
+                            f"({concerns} concern(s), {conflicts} claim conflict(s))"
+                            if evidence_items else "Limited evidence synthesized"
                         ),
                     )
+                    breakdown = summary_bundle.score_breakdown or {}
                     yield _stage(
                         "trust_score", "complete",
-                        detail=f"{output.trust_score}/100 ({output.confidence} confidence)",
+                        detail=breakdown.get("explanation") or f"{output.trust_score}/100 ({output.confidence} confidence)",
                     )
                     yield _stage("verdict", "complete", detail=output.verdict or None)
 
@@ -590,7 +597,7 @@ async def analyze_once(**kwargs) -> Dict:
             "pros": [], "cons": [], "verdict": "", "confidence": "none", "caveats": [],
             "trust_score": 50, "star_rating": 2.5, "recommendation": "INSUFFICIENT_DATA",
             "themes": [], "reasons_to_buy": [], "reasons_to_think_twice": [],
-            "claim_check": None, "review_risk": None, "score_breakdown": None,
+            "claim_check": None, "review_risk": None, "score_breakdown": None, "evidence": [],
         },
         "reviews": [],
         "videos": [],

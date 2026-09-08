@@ -125,7 +125,26 @@ class Summary(BaseModel):
         ),
     )
     score_breakdown: Optional[dict] = Field(
-        None, description="Weighted components explaining the trust score, or 'Not enough data'"
+        None,
+        description=(
+            "{overall, components, explanation}. `overall` is the weighted trust "
+            "score itself (never the model's own number). `components` is the "
+            "6 named signals (customer_experience, review_reliability, "
+            "recurring_complaints, external_evidence, claim_consistency, "
+            "evidence_confidence), each 0-100 or null with a note when there "
+            "wasn't enough data. `explanation` names the specific signals that "
+            "pulled the score up or down."
+        ),
+    )
+    evidence: List[dict] = Field(
+        default_factory=list,
+        description=(
+            "Structured findings behind the score: category, type "
+            "(evidence | concern | claim_conflict), explanation, review_mentions, "
+            "external_mentions, and — for claim_conflict — claim_text/"
+            "observed_reality. Each carries a signed impact_points tracing it back "
+            "to the score_breakdown component it fed."
+        ),
     )
 
 

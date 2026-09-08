@@ -147,6 +147,31 @@ class Settings:
         default_factory=lambda: _int("LLM_CONFIDENT_MIN_REVIEWS", 12)
     )
 
+    # --- Trust score weights ---
+    # The overall trust score is a weighted sum of six named, independently
+    # computed sub-signals (see app/services/scoring.py) — never the LLM's
+    # own opaque number. Weights are env-configurable so they can be tuned
+    # without a code change; they are expected to sum to ~1.0 but are
+    # renormalized at use if they don't.
+    score_weight_customer_experience: float = field(
+        default_factory=lambda: _float("SCORE_WEIGHT_CUSTOMER_EXPERIENCE", 0.25)
+    )
+    score_weight_review_reliability: float = field(
+        default_factory=lambda: _float("SCORE_WEIGHT_REVIEW_RELIABILITY", 0.15)
+    )
+    score_weight_recurring_complaints: float = field(
+        default_factory=lambda: _float("SCORE_WEIGHT_RECURRING_COMPLAINTS", 0.15)
+    )
+    score_weight_external_evidence: float = field(
+        default_factory=lambda: _float("SCORE_WEIGHT_EXTERNAL_EVIDENCE", 0.15)
+    )
+    score_weight_claim_consistency: float = field(
+        default_factory=lambda: _float("SCORE_WEIGHT_CLAIM_CONSISTENCY", 0.15)
+    )
+    score_weight_evidence_confidence: float = field(
+        default_factory=lambda: _float("SCORE_WEIGHT_EVIDENCE_CONFIDENCE", 0.15)
+    )
+
     # --- Cache (PostgreSQL) ---
     cache_enabled: bool = field(default_factory=lambda: _bool("CACHE_ENABLED", True))
     database_url: str = field(default_factory=lambda: (os.getenv("DATABASE_URL", "") or "").strip())

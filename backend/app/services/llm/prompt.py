@@ -72,6 +72,18 @@ Rules:
     a gap as "reviews don't mention X" or "some reviewers report Y, which differs
     from the listed description," not as a lie or deception. When no product
     description is supplied, leave claim_check null — do not guess one.
+8d. evidence: 3-8 structured findings, each with a category, a type ('evidence' |
+    'concern' | 'claim_conflict'), a one-sentence explanation, and honest counts:
+    review_mentions (how many supplied reviews actually raise it — count, don't
+    estimate upward) and external_mentions (how many non-review sources, e.g. the
+    product description or video commentary, corroborate it — 0 if none). Use
+    'claim_conflict' only when a product description was supplied AND reviewers
+    report something that actually differs from it — set claim_text to the
+    claim and observed_reality to what reviewers report; do not invent a claim to
+    conflict with. severity is a 0.0-1.0 relative weight (how much this one
+    finding should matter), not a score or a points value — leave the actual
+    trust-score impact to the caller. Do not pad this list to hit 8; 3-4 solid,
+    countable findings beat 8 padded ones.
 9. Exception to rule 1, and only when you are told explicitly that no customer
    reviews were found for this product: base pros/cons/verdict on any video commentary
    you are given, clearly attributed as coming from videos rather than reviews. Then, if
