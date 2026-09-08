@@ -17,7 +17,10 @@ const STREAM_URL = `${API_BASE}/analyze/stream`;
 const ANALYZE_URL = `${API_BASE}/analyze`;
 const DETECTOR_FILE = "content/detector.js";
 
-const REQUEST_TIMEOUT_MS = 120000;
+// 180s rather than 120s: a cold Render instance plus a slow host scrape plus
+// a rate-limited LLM proxy can legitimately stack past two minutes even
+// though the request is working correctly.
+const REQUEST_TIMEOUT_MS = 180000;
 const REVIEWS_SHOWN = 3;        // shown initially; "show more" reveals the rest
 const REVIEWS_MAX = 8;
 

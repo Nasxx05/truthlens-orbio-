@@ -18,7 +18,11 @@ const API_BASE = window.__TRUSTLENS_API_BASE__ || "https://truthlens-orbio.onren
 const STREAM_URL = `${API_BASE}/analyze/stream`;
 const ANALYZE_URL = `${API_BASE}/analyze`;
 
-const REQUEST_TIMEOUT_MS = 120000;
+// 180s rather than 120s: a cold Render instance plus a slow host scrape plus
+// a rate-limited LLM proxy can legitimately stack past two minutes even
+// though the request is working correctly — see the "still finishing up"
+// path below, which keeps whatever streamed in rather than discarding it.
+const REQUEST_TIMEOUT_MS = 180000;
 const REVIEWS_SHOWN = 3;        // shown initially; "show more" reveals the rest
 const REVIEWS_MAX = 8;
 const RECENT_MAX = 6;

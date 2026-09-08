@@ -83,8 +83,11 @@ class Settings:
     # source is omitted: reviews of a different product are worse than none.
     match_threshold: float = field(default_factory=lambda: _float("MATCH_THRESHOLD", 0.62))
     # Competitor collection runs concurrently with the host, but is capped so a
-    # slow competitor cannot hold up a finished host result.
-    competitor_timeout: float = field(default_factory=lambda: _float("COMPETITOR_TIMEOUT", 25.0))
+    # slow competitor cannot hold up a finished host result. Lowered from 25s:
+    # a competitor search that hasn't matched/scraped by 15s rarely pays off,
+    # and burning the full 25s on a miss is a real contributor to requests
+    # that blow past the client's timeout on a cold instance.
+    competitor_timeout: float = field(default_factory=lambda: _float("COMPETITOR_TIMEOUT", 15.0))
     competitor_review_max: int = field(default_factory=lambda: _int("COMPETITOR_REVIEW_MAX", 75))
 
     # --- Video discovery ---
