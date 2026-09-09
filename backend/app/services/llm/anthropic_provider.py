@@ -35,6 +35,20 @@ from app.services.llm.prompt import SYSTEM_PROMPT, build_user_prompt
 logger = logging.getLogger(__name__)
 
 
+def _format_validation_errors(error: ValidationError, limit: int = 8) -> str:
+    """Field paths + reasons, server-log only.
+
+    Pydantic's own str(error) is a multi-line block meant for a terminal;
+    this is a compact single-line summary aimed at a log line, capped so one
+    validation failure with many bad fields can't flood the log.
+    """
+    parts = []
+    for item in error.errors()[:limit]:
+        loc = ".".join(str(p) for p in item.get("loc", ()))
+        parts.append(f"{loc or '<root>'}: {item.get('msg')}")
+    return "; ".join(parts)
+
+
 class AnthropicProvider(LLMProvider):
     """Summarize reviews with Claude."""
 
@@ -129,12 +143,12 @@ class AnthropicProvider(LLMProvider):
                     response = await client.messages.parse(**kwargs)
                     break
                 except ValidationError as error:
+                    logger.info(
+                        "model output failed schema validation on attempt %s/%s: %s",
+                        attempt, max_attempts, _format_validation_errors(error),
+                    )
                     if attempt >= max_attempts:
                         raise
-                    logger.info(
-                        "model output failed schema validation on attempt %s/%s; retrying with repair hint",
-                        attempt, max_attempts,
-                    )
                     result.notes.append(
                         f"first response did not match schema ({len(error.errors())} error(s)); retried once"
                     )
@@ -200,8 +214,8 @@ class AnthropicProvider(LLMProvider):
             # behaviour, not a bug in this service.
             count = len(error.errors())
             logger.info(
-                "model output failed schema validation (%s error(s)) after %s attempt(s)",
-                count, attempt,
+                "model output failed schema validation (%s error(s)) after %s attempt(s): %s",
+                count, attempt, _format_validation_errors(error),
             )
             result.error = (
                 f"model output did not match the requested schema after {attempt} attempt(s) "
