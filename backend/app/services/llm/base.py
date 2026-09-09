@@ -127,7 +127,42 @@ class SummaryOutput(BaseModel):
             "Each one grounded in the supplied reviews (and, for claim_conflict, the "
             "supplied product description). Do not restate every pro/con as an "
             "evidence item; pick the notable, specific findings a shopper would want "
-            "traced back to real counts."
+            "traced back to real counts. When product evidence (reviews) is thin, this "
+            "list may also include 'Website/company trust' items — see rule 8d."
+        ),
+    )
+    who_should_buy: List[str] = Field(
+        default_factory=list,
+        description=(
+            "0-3 short statements of who this product actually fits, grounded strictly "
+            "in what reviewers say about their own use case (e.g. 'Good fit for casual "
+            "users who mainly care about battery life'). Empty list if reviews don't "
+            "give enough to say — never invent a demographic."
+        ),
+    )
+    who_should_avoid: List[str] = Field(
+        default_factory=list,
+        description=(
+            "0-2 short statements of who should probably skip this, grounded the same "
+            "way as who_should_buy — a real mismatch reviewers point to, not a generic "
+            "caveat. Empty list if there's nothing grounded to say."
+        ),
+    )
+    alternatives: List["AlternativeOutput"] = Field(
+        default_factory=list,
+        description=(
+            "0-3 comparable products a shopper might consider instead. Only populate "
+            "this from your own general knowledge when you recognize the specific "
+            "product, its brand, or its category — never fabricate a plausible-"
+            "sounding name. Leave empty when you don't recognize it. See rule 8f."
+        ),
+    )
+    alternatives_basis: Optional[str] = Field(
+        None,
+        description=(
+            "Set to exactly 'general_knowledge' whenever `alternatives` is non-empty "
+            "(it is always general knowledge, never verified against this app's own "
+            "data). Leave null when `alternatives` is empty."
         ),
     )
 
@@ -206,6 +241,15 @@ class EvidenceOutput(BaseModel):
     )
 
 
+class AlternativeOutput(BaseModel):
+    """One comparable product, offered as general knowledge — not verified data."""
+
+    name: str = Field(..., description="Product/brand name of the alternative")
+    reason: str = Field(
+        ..., description="One short, comparative sentence: why a shopper might consider this instead"
+    )
+
+
 SummaryOutput.model_rebuild()
 
 
@@ -232,6 +276,10 @@ class SummaryRequest:
     # Best-effort meta description scraped from the product page, if any. Used
     # only for the optional claim_check field — never fabricated when absent.
     product_description: Optional[str] = None
+    # The literal listing URL, if any. Used only to state literal, verifiable
+    # facts about it (scheme, domain) — never as license to comment on a
+    # company's reputation from general knowledge.
+    product_url: Optional[str] = None
 
 
 @dataclass

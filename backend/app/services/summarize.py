@@ -44,6 +44,7 @@ class SummaryBundle:
     score_breakdown: Optional[dict] = None
     evidence: List[dict] = field(default_factory=list)
     recommendation: str = "INSUFFICIENT_DATA"
+    confidence_reason: Optional[str] = None
 
     def to_meta_dict(self) -> dict:
         data = self.meta.to_dict()
@@ -88,6 +89,19 @@ def _confidence_ceiling(review_count: int, source_count: int) -> str:
     if review_count < 35:
         return "medium"
     return "high"
+
+
+def _confidence_reason(confidence: str, review_count: int, source_count: int) -> str:
+    """A short, human, traceable explanation of *why* confidence landed where it
+    did — the same review_count/source_count numbers that drove
+    ``_confidence_ceiling``, restated as a sentence rather than left as a bare
+    'low'/'medium'/'high' chip with no visible reasoning.
+    """
+    if review_count <= 0:
+        return "none — no customer reviews were found for this product."
+    platform_word = "platform" if source_count == 1 else "platforms"
+    basis = f"based on {review_count} review{'s' if review_count != 1 else ''} from {max(source_count, 1)} {platform_word}"
+    return f"{confidence} — {basis}."
 
 
 def _apply_caution(
@@ -196,6 +210,7 @@ async def summarize_reviews(
     video_evidence: Optional[List[dict]] = None,
     filter_report: Optional[dict] = None,
     product_description: Optional[str] = None,
+    product_url: Optional[str] = None,
 ) -> SummaryBundle:
     """Summarize the reviews that passed filtering.
 
@@ -239,6 +254,7 @@ async def summarize_reviews(
         ratings_by_source=ratings,
         video_evidence=(video_evidence or []) if not reviews else [],
         product_description=product_description,
+        product_url=product_url,
     )
 
     result = await provider.summarize(request)
@@ -259,6 +275,7 @@ async def summarize_reviews(
     )
     bundle.summary = summary
     bundle.adjustments = adjustments
+    bundle.confidence_reason = _confidence_reason(summary.confidence, result.reviews_used or len(reviews), len(sources))
 
     review_count = result.reviews_used or len(reviews)
     competitor_present = "competitor" in sources

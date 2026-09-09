@@ -190,6 +190,7 @@ async def analyze_stream(
                 video_evidence=video_evidence,
                 filter_report=filter_report,
                 product_description=(host_report or {}).get("description"),
+                product_url=product_url,
             )
         except Exception as error:  # pragma: no cover - summarize guards itself
             logger.exception("summarization failed")
@@ -347,6 +348,9 @@ async def analyze_stream(
                     "recommendation": summary_bundle.recommendation,
                     "themes": [], "reasons_to_buy": [], "reasons_to_think_twice": [],
                     "claim_check": None,
+                    "who_should_buy": [], "who_should_avoid": [],
+                    "alternatives": [], "alternatives_basis": None,
+                    "confidence_reason": summary_bundle.confidence_reason,
                     "review_risk": summary_bundle.review_risk,
                     "score_breakdown": summary_bundle.score_breakdown,
                     "evidence": summary_bundle.evidence,
@@ -365,6 +369,11 @@ async def analyze_stream(
                         "reasons_to_buy": summary_bundle.summary.reasons_to_buy,
                         "reasons_to_think_twice": summary_bundle.summary.reasons_to_think_twice,
                         "claim_check": summary_bundle.summary.claim_check,
+                        "who_should_buy": summary_bundle.summary.who_should_buy,
+                        "who_should_avoid": summary_bundle.summary.who_should_avoid,
+                        "alternatives": [alt.model_dump() for alt in summary_bundle.summary.alternatives],
+                        "alternatives_basis": summary_bundle.summary.alternatives_basis,
+                        "confidence_reason": summary_bundle.confidence_reason,
                         "review_risk": summary_bundle.review_risk,
                         "score_breakdown": summary_bundle.score_breakdown,
                         "evidence": summary_bundle.evidence,
@@ -598,6 +607,8 @@ async def analyze_once(**kwargs) -> Dict:
             "trust_score": 50, "star_rating": 2.5, "recommendation": "INSUFFICIENT_DATA",
             "themes": [], "reasons_to_buy": [], "reasons_to_think_twice": [],
             "claim_check": None, "review_risk": None, "score_breakdown": None, "evidence": [],
+            "who_should_buy": [], "who_should_avoid": [],
+            "alternatives": [], "alternatives_basis": None, "confidence_reason": None,
         },
         "reviews": [],
         "videos": [],

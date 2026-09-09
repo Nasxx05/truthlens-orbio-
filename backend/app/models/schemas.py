@@ -117,6 +117,33 @@ class Summary(BaseModel):
         None,
         description="Cautious note on whether reviews support the scraped product description, if one was found",
     )
+    who_should_buy: List[str] = Field(
+        default_factory=list, description="0-3 audience-fit statements grounded in reviewers' own use cases"
+    )
+    who_should_avoid: List[str] = Field(
+        default_factory=list, description="0-2 statements of who should probably skip this, grounded the same way"
+    )
+    alternatives: List[dict] = Field(
+        default_factory=list,
+        description=(
+            "0-3 comparable products {name, reason}, populated only from the model's "
+            "general knowledge — see alternatives_basis."
+        ),
+    )
+    alternatives_basis: Optional[str] = Field(
+        None,
+        description=(
+            "'general_knowledge' when `alternatives` is non-empty (always general "
+            "knowledge, never verified against this app's own data); null when empty."
+        ),
+    )
+    confidence_reason: Optional[str] = Field(
+        None,
+        description=(
+            "Deterministic, code-computed explanation of the confidence value above, "
+            "e.g. 'low — based on 4 reviews from 1 platform.'"
+        ),
+    )
     review_risk: Optional[dict] = Field(
         None,
         description=(

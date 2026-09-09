@@ -85,6 +85,7 @@
           <span class="badge hero__rec" id="hero-rec" hidden></span>
           <div class="hero__stars" id="hero-stars"></div>
           <div class="hero__confidence" id="hero-confidence"></div>
+          <p class="hero__confidence-reason" id="hero-confidence-reason" hidden></p>
           <p class="hero__claim" id="hero-claim" hidden></p>
           <p class="hero__explanation" id="hero-explanation" hidden></p>
         </div>
@@ -136,12 +137,49 @@
         <p class="risk-disclaimer" id="risk-disclaimer"></p>
       </section>
 
-      <!-- THEMES -->
+      <!-- THEMES: recurring topics split by sentiment, shown ahead of raw
+           reviews. -->
       <section class="section" id="sec-themes" hidden>
         <div class="section__head">
           <h2>What real users are saying</h2>
         </div>
-        <ul class="themes" id="themes"></ul>
+        <div class="prosCons">
+          <div class="prosCons__col" id="themes-positive-col">
+            <h3 class="prosCons__title prosCons__title--pro">What's working</h3>
+            <ul class="themes" id="themes-positive"></ul>
+          </div>
+          <div class="prosCons__col" id="themes-negative-col">
+            <h3 class="prosCons__title prosCons__title--con">What isn't</h3>
+            <ul class="themes" id="themes-negative"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- WHO SHOULD BUY: audience fit, grounded in reviewer-stated use cases -->
+      <section class="section" id="sec-audience" hidden>
+        <div class="section__head">
+          <h2>Who this fits</h2>
+        </div>
+        <div class="prosCons">
+          <div class="prosCons__col" id="audience-buy-col">
+            <h3 class="prosCons__title prosCons__title--pro">Good fit for</h3>
+            <ul class="bullets" id="audience-buy"></ul>
+          </div>
+          <div class="prosCons__col" id="audience-avoid-col">
+            <h3 class="prosCons__title prosCons__title--con">Consider skipping if</h3>
+            <ul class="bullets" id="audience-avoid"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- BETTER ALTERNATIVES: caveated general knowledge, never presented
+           as verified against this app's own collected data. -->
+      <section class="section" id="sec-alternatives" hidden>
+        <div class="section__head">
+          <h2>Alternatives to consider</h2>
+        </div>
+        <p class="alternatives__caveat" id="alternatives-caveat"></p>
+        <ul class="alternatives" id="alternatives"></ul>
       </section>
 
       <!-- EVIDENCE: structured findings behind the score, each traceable to

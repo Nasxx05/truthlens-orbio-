@@ -21,12 +21,36 @@ Three things this module is responsible for:
 """
 
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from app.config import settings
 from app.services.llm.base import SummaryRequest
 
 logger = logging.getLogger(__name__)
+
+
+def _listing_url_section(product_url: Optional[str]) -> List[str]:
+    """Literal, verifiable facts about the listing URL — scheme and domain
+    only, never anything implying a judgement about the company itself.
+    Empty when there's no URL to describe."""
+    if not product_url:
+        return []
+    try:
+        parsed = urlparse(product_url)
+    except ValueError:
+        return []
+    if not parsed.scheme or not parsed.netloc:
+        return []
+    return [
+        "",
+        "## Listing URL",
+        f"- Scheme: {parsed.scheme} ({'secure (https)' if parsed.scheme == 'https' else 'not https'})",
+        f"- Domain: {parsed.netloc}",
+        "Per rule 8d, these are the only literal facts about the listing you may cite "
+        "for a 'Website/company trust' evidence item — never infer legitimacy or "
+        "reputation from the domain name itself.",
+    ]
 
 
 SYSTEM_PROMPT = """You summarize product reviews for online shoppers deciding whether to buy.
@@ -84,6 +108,36 @@ Rules:
     finding should matter), not a score or a points value — leave the actual
     trust-score impact to the caller. Do not pad this list to hit 8; 3-4 solid,
     countable findings beat 8 padded ones.
+
+    Website/company trust items: only when review evidence is thin (few or no
+    reviews), you may add up to 2 additional evidence items with category
+    "Website/company trust", typed 'evidence' or 'concern' depending on sign.
+    These must be grounded ONLY in two things you were actually given: (a) the
+    literal text of the "## Product description" section, if supplied — e.g. it
+    states a clear warranty/return policy, or it reads as vague/templated with
+    no concrete detail; (b) the literal "## Listing URL" section, if supplied —
+    e.g. whether it uses https, whether the domain is a marketplace you can
+    plainly see is one from the URL text itself. Never assert a company is
+    "legitimate," "trustworthy," "reputable," "a scam," or similar from brand
+    reputation or general/world knowledge — that is exactly the kind of
+    unverifiable claim this rule exists to prevent. If neither section gives
+    you anything concrete to point to, add zero such items rather than padding
+    with a vague one.
+8e. who_should_buy / who_should_avoid: 0-3 and 0-2 short statements respectively,
+    grounded strictly in what reviewers say about their own use case or
+    mismatch (e.g. reviewers who use it for X are happy, reviewers who wanted Y
+    are not). Leave both empty when the reviews don't give you grounds for a
+    persona statement — do not invent a buyer type from the product category
+    alone.
+8f. alternatives: 0-3 items, each a product/brand name plus one short
+    comparative reason, populated ONLY from your own general knowledge and
+    ONLY when you recognize the specific product, its brand, or its category
+    well enough to name real, existing comparable products — never invent a
+    plausible-sounding name. When you populate this list at all, set
+    alternatives_basis to exactly "general_knowledge" (it is never verified
+    against this app's own data, so label it honestly). Leave both the list
+    and alternatives_basis empty/null when you don't recognize the product
+    well enough, rather than guessing.
 9. Exception to rule 1, and only when you are told explicitly that no customer
    reviews were found for this product: base pros/cons/verdict on any video commentary
    you are given, clearly attributed as coming from videos rather than reviews. Then, if
@@ -274,6 +328,8 @@ def _build_fallback_prompt(request: SummaryRequest) -> Tuple[str, int]:
     else:
         lines.append("- No review videos were found either.")
 
+    lines += _listing_url_section(request.product_url)
+
     if request.product_description:
         lines += [
             "",
@@ -352,6 +408,8 @@ def build_user_prompt(request: SummaryRequest) -> Tuple[str, int]:
         f"## What this evidence supports",
         instruction,
     ]
+
+    lines += _listing_url_section(request.product_url)
 
     if request.product_description:
         lines += [

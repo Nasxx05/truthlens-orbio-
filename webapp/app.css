@@ -460,6 +460,13 @@ h1 {
   font-size: 11.5px;
 }
 
+.hero__confidence-reason {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .hero__claim {
   margin: 8px 0 0;
   color: var(--fg-soft);
@@ -594,6 +601,29 @@ h1 {
 .theme--mixed .theme__dot    { background: var(--warn-fg); }
 
 .theme__count { color: var(--muted); font-size: 10.5px; }
+
+/* ------------------------------------------------------------- alternatives */
+
+.alternatives__caveat {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.alternatives { margin: 0; padding: 0; list-style: none; }
+
+.alternatives li {
+  padding: 8px 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg-soft);
+}
+.alternatives li + li { border-top: 1px solid var(--line); }
+.alternatives li b { color: var(--fg); }
 
 /* ---------------------------------------------------------------- sections */
 

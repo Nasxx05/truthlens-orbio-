@@ -23,7 +23,10 @@ const ANALYZE_URL = `${API_BASE}/analyze`;
 // though the request is working correctly — see the "still finishing up"
 // path below, which keeps whatever streamed in rather than discarding it.
 const REQUEST_TIMEOUT_MS = 180000;
-const REVIEWS_SHOWN = 3;        // shown initially; "show more" reveals the rest
+// Themes (split by sentiment) are the headline read on real users' opinions;
+// raw reviews are supporting detail, so only 1 is shown before "show more".
+const REVIEWS_SHOWN = 1;
+
 const REVIEWS_MAX = 8;
 const RECENT_MAX = 6;
 const RECENT_KEY = "trustlens:recent";
@@ -116,6 +119,7 @@ const ui = {
   heroRec: $("hero-rec"),
   heroStars: $("hero-stars"),
   heroConfidence: $("hero-confidence"),
+  heroConfidenceReason: $("hero-confidence-reason"),
   heroClaim: $("hero-claim"),
   heroExplanation: $("hero-explanation"),
 
@@ -143,7 +147,20 @@ const ui = {
   riskDisclaimer: $("risk-disclaimer"),
 
   secThemes: $("sec-themes"),
-  themes: $("themes"),
+  themesPositiveCol: $("themes-positive-col"),
+  themesPositive: $("themes-positive"),
+  themesNegativeCol: $("themes-negative-col"),
+  themesNegative: $("themes-negative"),
+
+  secAudience: $("sec-audience"),
+  audienceBuyCol: $("audience-buy-col"),
+  audienceBuy: $("audience-buy"),
+  audienceAvoidCol: $("audience-avoid-col"),
+  audienceAvoid: $("audience-avoid"),
+
+  secAlternatives: $("sec-alternatives"),
+  alternativesCaveat: $("alternatives-caveat"),
+  alternatives: $("alternatives"),
 
   secReasons: $("sec-reasons"),
   reasonsHeading: $("reasons-heading"),
@@ -286,11 +303,17 @@ function resetView() {
   show(ui.secBreakdown, false);
   show(ui.secRisk, false);
   show(ui.secThemes, false);
+  show(ui.secAudience, false);
+  show(ui.secAlternatives, false);
   show(ui.secReasons, false);
   ui.breakdown.replaceChildren();
   show(ui.breakdownExplanation, false);
   ui.riskSignals.replaceChildren();
-  ui.themes.replaceChildren();
+  ui.themesPositive.replaceChildren();
+  ui.themesNegative.replaceChildren();
+  ui.audienceBuy.replaceChildren();
+  ui.audienceAvoid.replaceChildren();
+  ui.alternatives.replaceChildren();
   ui.evidenceList.replaceChildren();
   ui.reasonsBuy.replaceChildren();
   ui.reasonsTwice.replaceChildren();
@@ -298,6 +321,7 @@ function resetView() {
   show(ui.heroRec, false);
   show(ui.heroClaim, false);
   show(ui.heroExplanation, false);
+  show(ui.heroConfidenceReason, false);
   ui.heroScore.textContent = "–";
   ui.heroStars.textContent = "";
   ui.heroConfidence.textContent = "";
@@ -337,6 +361,8 @@ function hideResults() {
   show(ui.secBreakdown, false);
   show(ui.secRisk, false);
   show(ui.secThemes, false);
+  show(ui.secAudience, false);
+  show(ui.secAlternatives, false);
   show(ui.secReasons, false);
   show(ui.secReviews, false);
   show(ui.secVideos, false);
@@ -531,6 +557,13 @@ function renderHero(summary) {
   const level = ["high", "medium", "low"].includes(summary.confidence) ? summary.confidence : "none";
   ui.heroConfidence.textContent = `${level} confidence verdict`;
 
+  if (summary.confidence_reason) {
+    ui.heroConfidenceReason.textContent = summary.confidence_reason;
+    show(ui.heroConfidenceReason, true);
+  } else {
+    show(ui.heroConfidenceReason, false);
+  }
+
   if (summary.claim_check) {
     ui.heroClaim.textContent = summary.claim_check;
     show(ui.heroClaim, true);
@@ -636,37 +669,96 @@ function renderRisk(risk) {
   show(ui.secRisk, true);
 }
 
+function themeNode(theme, sentiment) {
+  const li = document.createElement("li");
+  li.className = `theme theme--${sentiment}`;
+
+  const dot = document.createElement("span");
+  dot.className = "theme__dot";
+
+  const label = document.createElement("span");
+  label.textContent = theme.label || "";
+
+  li.append(dot, label);
+  if (theme.mention_count) {
+    const count = document.createElement("span");
+    count.className = "theme__count";
+    count.textContent = `×${theme.mention_count}`;
+    li.appendChild(count);
+  }
+  return li;
+}
+
+/**
+ * Themes are the headline read on real user opinion, shown ahead of raw
+ * reviews — split into "what's working" / "what isn't" by each theme's own
+ * sentiment (already supplied by the backend), rather than one flat list. A
+ * 'mixed' theme goes into whichever column currently has fewer items, so it
+ * still surfaces without skewing either side.
+ */
 function renderThemes(themes) {
-  if (!(themes || []).length) {
+  const list = themes || [];
+  if (!list.length) {
     show(ui.secThemes, false);
     return;
   }
 
-  ui.themes.replaceChildren(
-    ...themes.map((theme) => {
+  const positive = [];
+  const negative = [];
+  for (const theme of list) {
+    const sentiment = ["positive", "negative", "mixed"].includes(theme.sentiment)
+      ? theme.sentiment
+      : "mixed";
+    if (sentiment === "negative") negative.push(theme);
+    else if (sentiment === "positive") positive.push(theme);
+    else (positive.length <= negative.length ? positive : negative).push(theme);
+  }
+
+  ui.themesPositive.replaceChildren(...positive.map((t) => themeNode(t, "positive")));
+  ui.themesNegative.replaceChildren(...negative.map((t) => themeNode(t, "negative")));
+  show(ui.themesPositiveCol, positive.length > 0);
+  show(ui.themesNegativeCol, negative.length > 0);
+  show(ui.secThemes, true);
+}
+
+/** Who this product actually fits, grounded in reviewer-stated use cases. */
+function renderAudience(buy, avoid) {
+  const hasBuy = (buy || []).length > 0;
+  const hasAvoid = (avoid || []).length > 0;
+  if (!hasBuy && !hasAvoid) {
+    show(ui.secAudience, false);
+    return;
+  }
+  bulletList(ui.audienceBuy, buy);
+  bulletList(ui.audienceAvoid, avoid);
+  show(ui.audienceBuyCol, hasBuy);
+  show(ui.audienceAvoidCol, hasAvoid);
+  show(ui.secAudience, true);
+}
+
+/** Caveated general-knowledge suggestions — never presented as verified data. */
+function renderAlternatives(alternatives, basis) {
+  const items = alternatives || [];
+  if (!items.length) {
+    show(ui.secAlternatives, false);
+    return;
+  }
+
+  ui.alternativesCaveat.textContent =
+    basis === "general_knowledge"
+      ? "Based on general knowledge of similar products — not verified against TrustLens's own data."
+      : "Not verified against TrustLens's own data.";
+
+  ui.alternatives.replaceChildren(
+    ...items.map((item) => {
       const li = document.createElement("li");
-      const sentiment = ["positive", "negative", "mixed"].includes(theme.sentiment)
-        ? theme.sentiment
-        : "mixed";
-      li.className = `theme theme--${sentiment}`;
-
-      const dot = document.createElement("span");
-      dot.className = "theme__dot";
-
-      const label = document.createElement("span");
-      label.textContent = theme.label || "";
-
-      li.append(dot, label);
-      if (theme.mention_count) {
-        const count = document.createElement("span");
-        count.className = "theme__count";
-        count.textContent = `×${theme.mention_count}`;
-        li.appendChild(count);
-      }
+      const b = document.createElement("b");
+      b.textContent = item.name || "";
+      li.append(b, document.createTextNode(item.reason ? ` — ${item.reason}` : ""));
       return li;
     })
   );
-  show(ui.secThemes, true);
+  show(ui.secAlternatives, true);
 }
 
 const EVIDENCE_TYPE_LABEL = { evidence: "Evidence", concern: "Concern", claim_conflict: "Claim conflict" };
@@ -786,12 +878,16 @@ function renderSummary(summary, llm) {
     show(ui.summaryEmpty, true);
     show(ui.secHero, false);
     show(ui.secThemes, false);
+    show(ui.secAudience, false);
+    show(ui.secAlternatives, false);
     show(ui.secReasons, false);
     return;
   }
 
   renderHero(summary);
   renderThemes(summary.themes);
+  renderAudience(summary.who_should_buy, summary.who_should_avoid);
+  renderAlternatives(summary.alternatives, summary.alternatives_basis);
   renderReasons(summary.evidence, summary.reasons_to_buy, summary.reasons_to_think_twice);
 
   ui.verdict.textContent = summary.verdict || "";
