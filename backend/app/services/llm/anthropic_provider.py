@@ -51,13 +51,21 @@ class AnthropicProvider(LLMProvider):
         """Credentials present?
 
         Read at call time rather than cached, so adding a key to the
-        environment does not require a restart. An unset ANTHROPIC_API_KEY does
-        not by itself mean there are no credentials — the SDK also resolves
-        ANTHROPIC_AUTH_TOKEN and an `ant auth login` profile — but requiring an
-        explicit key here keeps a server's behaviour predictable rather than
-        depending on whoever's shell it inherited.
+        environment does not require a restart. Two shapes are accepted,
+        matching what the SDK itself resolves when the client is constructed
+        with no explicit ``api_key``/``auth_token``/``base_url`` (as it is,
+        below): a native ``ANTHROPIC_API_KEY`` (sent as ``x-api-key``), or
+        ``ANTHROPIC_AUTH_TOKEN`` (sent as ``Authorization: Bearer ...``) —
+        the shape a Bearer-token proxy in front of the Anthropic API needs,
+        typically paired with ``ANTHROPIC_BASE_URL`` pointing at that proxy
+        instead of api.anthropic.com. Deliberately not falling back further
+        to an `ant auth login` profile, which would depend on whoever's
+        shell this process inherited rather than explicit configuration.
         """
-        return bool((os.getenv("ANTHROPIC_API_KEY") or "").strip())
+        return bool(
+            (os.getenv("ANTHROPIC_API_KEY") or "").strip()
+            or (os.getenv("ANTHROPIC_AUTH_TOKEN") or "").strip()
+        )
 
     async def summarize(self, request: SummaryRequest) -> SummaryResult:
         started = time.monotonic()
