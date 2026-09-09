@@ -602,6 +602,29 @@ h1 {
 
 .theme__count { color: var(--muted); font-size: 10.5px; }
 
+/* --------------------------------------------------------- product details */
+
+.details-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 16px;
+  row-gap: 8px;
+}
+
+.details-grid dt {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.details-grid dd {
+  margin: 0;
+  color: var(--fg-soft);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
 /* ------------------------------------------------------------- alternatives */
 
 .alternatives__caveat {

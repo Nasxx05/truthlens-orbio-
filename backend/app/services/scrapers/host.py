@@ -21,6 +21,7 @@ from app.services.scrapers import browser
 from app.services.scrapers.base import Review, ScrapeResult
 from app.services.scrapers.extract import (
     extract_product_description,
+    extract_product_details,
     extract_product_image,
     from_dom,
     from_structured_data,
@@ -144,6 +145,12 @@ async def scrape_host_reviews(
                         result.description = extract_product_description(page.html, page.url)
                     except Exception as error:
                         logger.debug("product description extraction failed on %s: %s", page.url, error)
+
+                if not result.product_details:
+                    try:
+                        result.product_details = extract_product_details(page.html, page.url)
+                    except Exception as error:
+                        logger.debug("product detail extraction failed on %s: %s", page.url, error)
 
                 reviews, strategy = _extract(page.html, source, page.url)
                 added = result.add(reviews, strategy, limit)

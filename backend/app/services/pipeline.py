@@ -20,6 +20,7 @@ from typing import AsyncIterator, Dict, List, Optional
 
 from app.config import settings
 from app.services.aggregate import collect_streaming, derive_name_from_url, merged_videos
+from app.services.currency import usd_amount
 from app.services.nlp import filter_reviews
 from app.services.llm import SummaryResult
 from app.services.summarize import SummaryBundle, summarize_reviews
@@ -438,6 +439,15 @@ async def analyze_stream(
                 elif source_kind == "host":
                     host_result = value
                     host_report = value.to_dict()
+                    details = host_report.get("product_details") or None
+                    if details and details.get("price") is not None and details.get("currency"):
+                        try:
+                            converted = await usd_amount(details["price"], details["currency"])
+                        except Exception:  # pragma: no cover - never let this break the pipeline
+                            logger.exception("currency conversion failed")
+                            converted = None
+                        if converted is not None:
+                            details["price_usd"] = converted
                     review_sources.append(host_report)
                     seen_review_sources.add("host")
                     yield {"event": "source", "kind": "host", "report": host_report}
@@ -589,6 +599,7 @@ async def analyze_stream(
         "duration_ms": duration_ms,
         "image_url": (host_report or {}).get("image_url"),
         "description": (host_report or {}).get("description"),
+        "product_details": (host_report or {}).get("product_details"),
         "partial": partial,
         "partial_reasons": partial_reasons,
     }
@@ -622,6 +633,7 @@ async def analyze_once(**kwargs) -> Dict:
         "message": None,
         "image_url": None,
         "description": None,
+        "product_details": None,
         "partial": False,
         "partial_reasons": [],
     }
@@ -646,6 +658,7 @@ async def analyze_once(**kwargs) -> Dict:
             assembled["videos"] = event["videos"]
             assembled["image_url"] = event.get("image_url")
             assembled["description"] = event.get("description")
+            assembled["product_details"] = event.get("product_details")
             assembled["partial"] = event.get("partial", False)
             assembled["partial_reasons"] = event.get("partial_reasons", [])
         elif name == "error":

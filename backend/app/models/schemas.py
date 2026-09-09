@@ -195,6 +195,14 @@ class SourceReport(BaseModel):
     duration_ms: Optional[int] = None
     image_url: Optional[str] = Field(None, description="Product image scraped from the host page, if found")
     description: Optional[str] = Field(None, description="Product description scraped from the host page, if found")
+    product_details: Optional[dict] = Field(
+        None,
+        description=(
+            "Buyer-facing facts scraped from the host page: name, price, currency, "
+            "price_usd (only when convertible), color, brand, sku. Only keys "
+            "actually found are present."
+        ),
+    )
 
 
 class VideoSourceReport(BaseModel):
@@ -321,6 +329,13 @@ class AnalyzeResponse(BaseModel):
     )
     description: Optional[str] = Field(
         None, description="Product description, scraped from the host page when available"
+    )
+    product_details: Optional[dict] = Field(
+        None,
+        description=(
+            "Name, price (with price_usd when convertible), color, brand, sku "
+            "scraped from the host page. Only keys actually found are present."
+        ),
     )
     partial: bool = Field(
         False,

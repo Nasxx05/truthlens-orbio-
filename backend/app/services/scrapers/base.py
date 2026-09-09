@@ -81,6 +81,7 @@ class ScrapeResult:
     duration_ms: Optional[int] = None
     image_url: Optional[str] = None  # product image, scraped from the host page
     description: Optional[str] = None  # product description, scraped from the host page
+    product_details: Optional[dict] = None  # name/price/color/brand/sku, scraped from the host page
 
     def add(self, reviews: List[Review], strategy: str, limit: int) -> int:
         """Merge in newly found reviews, deduplicated and capped.
@@ -124,6 +125,7 @@ class ScrapeResult:
             "duration_ms": self.duration_ms,
             "image_url": self.image_url,
             "description": self.description,
+            "product_details": self.product_details,
         }
 
 

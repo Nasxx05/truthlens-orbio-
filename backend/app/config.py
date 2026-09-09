@@ -147,6 +147,12 @@ class Settings:
         default_factory=lambda: _int("LLM_CONFIDENT_MIN_REVIEWS", 12)
     )
 
+    # --- Currency conversion ---
+    # A scraped price is only ever shown in USD when it can be genuinely
+    # converted; this bounds how long that one outbound lookup is allowed to
+    # take before the price is shown in its original currency instead.
+    currency_api_timeout: float = field(default_factory=lambda: _float("CURRENCY_API_TIMEOUT", 5.0))
+
     # --- Trust score weights ---
     # The overall trust score is a weighted sum of six named, independently
     # computed sub-signals (see app/services/scoring.py) — never the LLM's

@@ -534,6 +534,135 @@ def extract_product_description(html: str, page_url: str) -> Optional[str]:
     return None
 
 
+def _product_node(soup: BeautifulSoup) -> Optional[dict]:
+    """The first JSON-LD node typed Product on the page, if any."""
+    for block in soup.find_all("script", attrs={"type": re.compile("ld\\+json", re.I)}):
+        raw = block.string or block.get_text() or ""
+        if not raw.strip():
+            continue
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+
+        for node in _walk(parsed):
+            types = node.get("@type")
+            types = types if isinstance(types, list) else [types]
+            if any(isinstance(t, str) and t.lower() == "product" for t in types):
+                return node
+    return None
+
+
+def _product_offer(node: dict) -> Optional[dict]:
+    """The first offer that actually carries a price, if any."""
+    offers = _first(node.get("offers"))
+    if isinstance(offers, dict):
+        return offers if offers.get("price") is not None else None
+    if isinstance(node.get("offers"), list):
+        for offer in node["offers"]:
+            if isinstance(offer, dict) and offer.get("price") is not None:
+                return offer
+    return None
+
+
+def _product_color(node: dict) -> Optional[str]:
+    color = node.get("color")
+    if isinstance(color, str) and color.strip():
+        return color.strip()
+    for prop in node.get("additionalProperty") or []:
+        if not isinstance(prop, dict):
+            continue
+        name = str(prop.get("name") or "").strip().lower()
+        if name in ("color", "colour"):
+            value = prop.get("value")
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return None
+
+
+def _product_brand(node: dict) -> Optional[str]:
+    brand = node.get("brand")
+    if isinstance(brand, dict):
+        name = brand.get("name")
+        return name.strip() if isinstance(name, str) and name.strip() else None
+    if isinstance(brand, str) and brand.strip():
+        return brand.strip()
+    return None
+
+
+def extract_product_details(html: str, page_url: str) -> dict:
+    """Buyer-facing facts about the product itself: name, price, color,
+    brand, SKU — whatever the page actually advertises.
+
+    Mirrors :func:`extract_product_image`'s trust ordering (meta tags, then
+    schema.org Product JSON-LD), extended to more fields off the same
+    Product node. Best-effort and partial by design: returns only the keys
+    actually found, and an empty dict when the page advertises none of
+    this — never a guessed or placeholder value.
+    """
+    soup = soup_of(html)
+    details: dict = {}
+
+    for selector in ('meta[property="og:title"]', 'meta[name="twitter:title"]'):
+        node = soup.select_one(selector)
+        if node and node.get("content"):
+            text = " ".join(node["content"].split())
+            if text:
+                details["name"] = text
+                break
+
+    price_amount = None
+    price_currency = None
+    for amount_sel, currency_sel in (
+        ('meta[property="product:price:amount"]', 'meta[property="product:price:currency"]'),
+    ):
+        amount_node = soup.select_one(amount_sel)
+        currency_node = soup.select_one(currency_sel)
+        if amount_node and amount_node.get("content"):
+            try:
+                price_amount = float(str(amount_node["content"]).strip())
+            except (TypeError, ValueError):
+                price_amount = None
+            if price_amount is not None and currency_node and currency_node.get("content"):
+                price_currency = str(currency_node["content"]).strip()
+
+    product = _product_node(soup)
+    if product:
+        if "name" not in details:
+            name = product.get("name")
+            if isinstance(name, str) and name.strip():
+                details["name"] = " ".join(name.split())
+
+        if price_amount is None:
+            offer = _product_offer(product)
+            if offer:
+                try:
+                    price_amount = float(offer["price"])
+                except (TypeError, ValueError):
+                    price_amount = None
+                currency = offer.get("priceCurrency")
+                if price_amount is not None and isinstance(currency, str) and currency.strip():
+                    price_currency = currency.strip()
+
+        color = _product_color(product)
+        if color:
+            details["color"] = color
+
+        brand = _product_brand(product)
+        if brand:
+            details["brand"] = brand
+
+        sku = product.get("sku") or product.get("mpn") or product.get("gtin13") or product.get("gtin")
+        if isinstance(sku, str) and sku.strip():
+            details["sku"] = sku.strip()
+
+    if price_amount is not None and price_currency:
+        details["price"] = price_amount
+        details["currency"] = price_currency.upper()
+
+    return details
+
+
 def find_next_page(html: str, page_url: str) -> Optional[str]:
     """Next page of reviews, if the page advertises one."""
     soup = soup_of(html)

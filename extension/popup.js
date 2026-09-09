@@ -105,6 +105,9 @@ const ui = {
   manualError: $("manual-error"),
   rescan: $("rescan"),
 
+  secDetails: $("sec-details"),
+  detailsGrid: $("details-grid"),
+
   secHero: $("sec-hero"),
   heroScoreRing: $("hero-score-ring"),
   heroScore: $("hero-score"),
@@ -303,6 +306,8 @@ function resetView() {
     show(body, false);
   }
 
+  show(ui.secDetails, false);
+  ui.detailsGrid.replaceChildren();
   show(ui.secHero, false);
   show(ui.secBreakdown, false);
   show(ui.secRisk, false);
@@ -359,6 +364,7 @@ function resetView() {
 function hideResults() {
   show(ui.rail, false);
   show(ui.partialBanner, false);
+  show(ui.secDetails, false);
   show(ui.secHero, false);
   show(ui.secBreakdown, false);
   show(ui.secRisk, false);
@@ -484,6 +490,58 @@ function scoreRingColor(score) {
   if (score >= 70) return "var(--ok-fg)";
   if (score >= 40) return "var(--warn-fg)";
   return "var(--err-fg)";
+}
+
+const DETAILS_LABEL = { name: "Name", price: "Price", color: "Color", brand: "Brand", sku: "SKU" };
+
+/** Format a price for display, converted to USD when available — never a
+ * guessed rate, only what the backend actually converted. */
+function formatPrice(details) {
+  const { price, currency, price_usd: priceUsd } = details;
+  if (typeof price !== "number" || !currency) return null;
+  let text;
+  try {
+    text = new Intl.NumberFormat(undefined, { style: "currency", currency }).format(price);
+  } catch {
+    text = `${price} ${currency}`;
+  }
+  if (typeof priceUsd === "number" && currency.toUpperCase() !== "USD") {
+    text += ` (~$${priceUsd.toFixed(2)} USD)`;
+  }
+  return text;
+}
+
+/**
+ * Buyer-facing facts scraped from the host page — name, price, color, brand,
+ * SKU. Only real, scraped fields are shown; the whole section stays hidden
+ * when nothing was found, never a placeholder row.
+ */
+function renderProductDetails(details) {
+  const data = details || {};
+  const rows = [];
+
+  if (data.name) rows.push(["name", data.name]);
+  const price = formatPrice(data);
+  if (price) rows.push(["price", price]);
+  if (data.brand) rows.push(["brand", data.brand]);
+  if (data.color) rows.push(["color", data.color]);
+  if (data.sku) rows.push(["sku", data.sku]);
+
+  if (!rows.length) {
+    show(ui.secDetails, false);
+    return;
+  }
+
+  ui.detailsGrid.replaceChildren(
+    ...rows.flatMap(([key, value]) => {
+      const dt = document.createElement("dt");
+      dt.textContent = DETAILS_LABEL[key] || key;
+      const dd = document.createElement("dd");
+      dd.textContent = value;
+      return [dt, dd];
+    })
+  );
+  show(ui.secDetails, true);
 }
 
 function renderHero(summary) {
@@ -1097,6 +1155,7 @@ function applyEvent(event) {
           ui.productImage.src = report.image_url;
           show(ui.productImage, true);
         }
+        renderProductDetails(report.product_details);
       }
       break;
     case "reviews":
@@ -1264,6 +1323,7 @@ async function runOnce(body, signal) {
     ui.productImage.src = data.image_url;
     show(ui.productImage, true);
   }
+  renderProductDetails(data.product_details);
   applyEvent({ event: "reviews", reviews: data.reviews, reviews_passed: data.reviews_passed,
                filter_report: data.filter_report, sources: data.sources });
   applyEvent({ event: "summary", summary: data.summary, llm: data.llm });
