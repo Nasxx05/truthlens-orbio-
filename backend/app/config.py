@@ -9,6 +9,10 @@ import os
 from dataclasses import dataclass, field
 from typing import List
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def _int(name: str, default: int) -> int:
     """Read an int from the environment, falling back rather than crashing."""
