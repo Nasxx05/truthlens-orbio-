@@ -278,7 +278,6 @@ async def summarize_reviews(
     bundle.confidence_reason = _confidence_reason(summary.confidence, result.reviews_used or len(reviews), len(sources))
 
     review_count = result.reviews_used or len(reviews)
-    competitor_present = "competitor" in sources
 
     # Evidence items are converted to plain dicts up front: scoring mutates
     # them in place (adding impact_points), and the response carries these
@@ -291,7 +290,6 @@ async def summarize_reviews(
         evidence=evidence,
         ratings_by_source=ratings,
         video_count=len(video_evidence or []) if not reviews else 0,
-        competitor_present=competitor_present,
         source_count=len(sources),
         claim_attempted=bool(request.product_description),
     )

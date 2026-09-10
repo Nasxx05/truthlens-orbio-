@@ -86,9 +86,6 @@ const ui = {
   railProgress: $("rail-progress"),
   main: $("main"),
 
-  partialBanner: $("partial-banner"),
-  partialBannerText: $("partial-banner-text"),
-
   stateError: $("state-error"),
   errorTitle: $("error-title"),
   errorBody: $("error-body"),
@@ -291,7 +288,6 @@ function resetView() {
 
   show(ui.rail, true);
   buildRail(FALLBACK_STAGES);
-  show(ui.partialBanner, false);
 
   show(ui.stateError, false);
   show(ui.stateThin, false);
@@ -363,7 +359,6 @@ function resetView() {
 /** Hide the analysis sections entirely — for detection failures. */
 function hideResults() {
   show(ui.rail, false);
-  show(ui.partialBanner, false);
   show(ui.secDetails, false);
   show(ui.secHero, false);
   show(ui.secBreakdown, false);
@@ -375,15 +370,6 @@ function hideResults() {
   show(ui.secSummary, false);
   show(ui.secReviews, false);
   show(ui.secVideos, false);
-}
-
-/** Non-blocking notice: a verdict was produced, but a real source failed along the way. */
-function showPartialBanner(reasons) {
-  const detail = (reasons || []).length ? ` ${reasons.join("; ")}.` : "";
-  ui.partialBannerText.textContent =
-    "Review analysis completed, but some external evidence was unavailable. " +
-    "TrustLens reduced confidence accordingly." + detail;
-  show(ui.partialBanner, true);
 }
 
 function fail(title, body, hint) {
@@ -1118,10 +1104,6 @@ function renderDone(event) {
       "There isn't enough review evidence to produce a reliable verdict." +
       (event.message ? ` ${event.message}` : "");
     show(ui.stateThin, true);
-  } else if (event.status === "not_enough_data") {
-    showPartialBanner([event.message].filter(Boolean));
-  } else if (event.partial) {
-    showPartialBanner(event.partial_reasons);
   }
 }
 
@@ -1174,16 +1156,12 @@ function applyEvent(event) {
       }
       break;
     }
-    case "match":
-      break;
     case "done":
       renderDone(event);
       break;
     case "error": {
       const copy = ERROR_COPY[event.code] || null;
-      if (hasPartialResults) {
-        showPartialBanner([copy ? copy.body : "The investigation could not finish."]);
-      } else {
+      if (!hasPartialResults) {
         hideResults();
         fail(
           copy ? copy.title : "Investigation failed",
@@ -1264,8 +1242,8 @@ function deriveStageEvents(data) {
   const reviews = data.reviews || [];
   const reviewsPassed = data.reviews_passed || 0;
   const sources = data.sources || [];
-  const host = sources.find((s) => s.source && s.source !== "competitor") || {};
-  const attemptedCompetitor = sources.some((s) => s.source === "competitor");
+  const host = sources[0] || {};
+  const attemptedVideo = (data.video_sources || []).length > 0;
   const videosPresent = (data.videos || []).length > 0;
   const hasVerdict = Boolean(summary.verdict);
 
@@ -1284,7 +1262,7 @@ function deriveStageEvents(data) {
     { event: "stage", id: "review_reliability", status: summary.review_risk ? "complete" : "skipped" },
     {
       event: "stage", id: "external_research",
-      status: !attemptedCompetitor && !videosPresent ? "skipped" : (videosPresent || attemptedCompetitor ? "complete" : "failed"),
+      status: !attemptedVideo ? "skipped" : (videosPresent ? "complete" : "failed"),
     },
     { event: "stage", id: "claim_research", status: summary.claim_check ? "complete" : "skipped" },
     { event: "stage", id: "evidence_synthesis", status: hasVerdict ? "complete" : "failed" },

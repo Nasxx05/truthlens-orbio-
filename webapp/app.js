@@ -91,9 +91,6 @@ const ui = {
   railProgress: $("rail-progress"),
   main: $("main"),
 
-  partialBanner: $("partial-banner"),
-  partialBannerText: $("partial-banner-text"),
-
   promo: $("promo"),
   promoDismiss: $("promo-dismiss"),
 
@@ -288,7 +285,6 @@ function resetView() {
 
   show(ui.rail, true);
   buildRail(FALLBACK_STAGES);
-  show(ui.partialBanner, false);
 
   show(ui.stateError, false);
   show(ui.stateThin, false);
@@ -360,7 +356,6 @@ function resetView() {
 
 function hideResults() {
   show(ui.rail, false);
-  show(ui.partialBanner, false);
   show(ui.secDetails, false);
   show(ui.secHero, false);
   show(ui.secSummary, false);
@@ -386,17 +381,6 @@ function fail(title, body, hint) {
   }
   show(ui.stateError, true);
   show(ui.retry, true);
-}
-
-/** Non-blocking notice: a verdict was produced, but a real source failed along the way. */
-function showPartialBanner(reasons) {
-  const detail = (reasons || []).length
-    ? ` ${reasons.join("; ")}.`
-    : "";
-  ui.partialBannerText.textContent =
-    "Review analysis completed, but some external evidence was unavailable. " +
-    "TrustLens reduced confidence accordingly." + detail;
-  show(ui.partialBanner, true);
 }
 
 /* ---------------------------------------------------------------- recents */
@@ -1166,12 +1150,6 @@ function renderDone(event) {
       (event.message ? ` ${event.message}` : "");
     show(ui.stateThin, true);
     show(ui.retry, true);
-  } else if (event.status === "not_enough_data") {
-    // Some real evidence did render (e.g. a fallback verdict from video
-    // commentary) even though reviews were thin — say so without hiding it.
-    showPartialBanner([event.message].filter(Boolean));
-  } else if (event.partial) {
-    showPartialBanner(event.partial_reasons);
   }
 }
 
@@ -1229,24 +1207,21 @@ function applyEvent(event) {
       }
       break;
     }
-    case "match":
-      break;
     case "done":
       renderDone(event);
       break;
     case "error": {
       const copy = ERROR_COPY[event.code] || null;
-      if (hasPartialResults) {
-        // Evidence already rendered successfully before this failed — keep
-        // it visible and say so, rather than replacing it with a scary error.
-        showPartialBanner([copy ? copy.body : "The investigation could not finish."]);
-      } else {
+      if (!hasPartialResults) {
+        // No evidence rendered yet — nothing to keep, so show the error state.
         hideResults();
         fail(
           copy ? copy.title : "Investigation failed",
           copy ? copy.body : "TrustLens couldn't complete the investigation. Please try again."
         );
       }
+      // Evidence already rendered successfully before this failed — leave it
+      // visible as-is rather than replacing it with a scary error.
       break;
     }
     default:
@@ -1366,8 +1341,8 @@ function deriveStageEvents(data) {
   const reviews = data.reviews || [];
   const reviewsPassed = data.reviews_passed || 0;
   const sources = data.sources || [];
-  const host = sources.find((s) => s.source && s.source !== "competitor") || {};
-  const attemptedCompetitor = sources.some((s) => s.source === "competitor");
+  const host = sources[0] || {};
+  const attemptedVideo = (data.video_sources || []).length > 0;
   const videosPresent = (data.videos || []).length > 0;
   const hasVerdict = Boolean(summary.verdict);
 
@@ -1387,7 +1362,7 @@ function deriveStageEvents(data) {
   events.push({ event: "stage", id: "review_reliability", status: summary.review_risk ? "complete" : "skipped" });
   events.push({
     event: "stage", id: "external_research",
-    status: !attemptedCompetitor && !videosPresent ? "skipped" : (videosPresent || attemptedCompetitor ? "complete" : "failed"),
+    status: !attemptedVideo ? "skipped" : (videosPresent ? "complete" : "failed"),
   });
   events.push({ event: "stage", id: "claim_research", status: summary.claim_check ? "complete" : "skipped" });
   events.push({ event: "stage", id: "evidence_synthesis", status: hasVerdict ? "complete" : "failed" });

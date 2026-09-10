@@ -1,12 +1,10 @@
 """Concurrent collection across every data source.
 
-All four sources — host reviews, competitor reviews, YouTube, TikTok — are
-independent, so they run at once rather than in sequence. Two rules follow from
-the architecture:
+Sources — host reviews, YouTube, TikTok — are independent, so they run at
+once rather than in sequence. Two rules follow from the architecture:
 
   * **One slow source cannot delay the others.** Each task carries its own
-    timeout, and the gather collects whatever finished. A competitor site that
-    hangs costs its own budget and nothing else.
+    timeout, and the gather collects whatever finished.
   * **One broken source cannot fail the request.** Tasks are gathered with
     exceptions captured, and anything that raised is reported as a failed
     source alongside the results that succeeded.
@@ -17,13 +15,11 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import List, Optional
 from urllib.parse import unquote, urlparse
 
 from app.config import settings
-from app.services.matching import MatchVerdict
 from app.services.scrapers.base import Review, ScrapeResult
-from app.services.scrapers.competitor import scrape_competitor_reviews
 from app.services.scrapers.host import scrape_host_reviews
 from app.services.videos import VideoResult
 from app.services.videos import tiktok as tiktok_source
@@ -37,28 +33,16 @@ class Collection:
     """Everything gathered for one product."""
 
     host: ScrapeResult
-    competitor: Optional[ScrapeResult] = None
-    match: Optional[MatchVerdict] = None
-    matched_product: Optional[dict] = None
     videos: List[VideoResult] = field(default_factory=list)
     duration_ms: Optional[int] = None
 
     @property
     def reviews(self) -> List[Review]:
-        """Reviews from every source, each still tagged with its own platform.
-
-        Host reviews come first, but ``source`` is what identifies them —
-        divergence between platforms is the signal, so they are never pooled
-        into an anonymous list.
-        """
-        merged = list(self.host.reviews)
-        if self.competitor:
-            merged.extend(self.competitor.reviews)
-        return merged
+        return list(self.host.reviews)
 
     @property
     def review_sources(self) -> List[ScrapeResult]:
-        return [r for r in (self.host, self.competitor) if r is not None]
+        return [self.host]
 
 
 _URL_NAME_SKIP_SEGMENTS = {
@@ -71,9 +55,9 @@ def derive_name_from_url(url: Optional[str]) -> Optional[str]:
     """Best-effort product name guess from a URL path segment.
 
     Fallback only: when a host site blocks scraping outright (a 404/403 before
-    any title is read), there is otherwise nothing to hand to competitor-site
-    or video search — and a shopper on a blocked site would get no output at
-    all. Most retail URLs embed the title in a slug (e.g.
+    any title is read), there is otherwise nothing to hand to video search —
+    and a shopper on a blocked site would get no output at all. Most retail
+    URLs embed the title in a slug (e.g.
     ``/Anker-PowerCore-10000/dp/B0XXXXX``), which is a decent search phrase
     even though it is not a scraped, verified name.
     """
@@ -123,7 +107,6 @@ async def collect(
     product_name: Optional[str],
     product_id: Optional[str] = None,
     site_hint: Optional[str] = None,
-    want_competitor: bool = True,
     want_videos: bool = True,
 ) -> Collection:
     """Gather reviews and videos for one product, concurrently."""
@@ -138,16 +121,6 @@ async def collect(
     )
 
     tasks = {"host": host_task}
-
-    if want_competitor and (product_name or "").strip():
-        tasks["competitor"] = asyncio.create_task(
-            scrape_competitor_reviews(
-                product_name,
-                host_url=product_url,
-                host_site=site_hint,
-                product_meta={"product_id": product_id},
-            )
-        )
 
     if want_videos and (product_name or "").strip():
         tasks["youtube"] = asyncio.create_task(
@@ -169,21 +142,6 @@ async def collect(
 
     collection = Collection(host=host_result)
 
-    if "competitor" in tasks:
-        fallback: Tuple[ScrapeResult, MatchVerdict, Optional[dict]] = (
-            ScrapeResult(source="competitor", ok=False, error="competitor collection did not complete"),
-            MatchVerdict(False, 0.0, "none", ["competitor collection did not complete"], []),
-            None,
-        )
-        (competitor_result, verdict, matched), note = await _guard(
-            "competitor scrape", tasks["competitor"], settings.competitor_timeout + 5, fallback
-        )
-        if note:
-            competitor_result.notes.append(note)
-        collection.competitor = competitor_result
-        collection.match = verdict
-        collection.matched_product = matched
-
     for name in ("youtube", "tiktok"):
         if name not in tasks:
             continue
@@ -198,9 +156,8 @@ async def collect(
 
     collection.duration_ms = int((time.monotonic() - started) * 1000)
     logger.info(
-        "collected host=%s competitor=%s videos=%s in %sms",
+        "collected host=%s videos=%s in %sms",
         len(collection.host.reviews),
-        len(collection.competitor.reviews) if collection.competitor else "-",
         sum(len(v.videos) for v in collection.videos),
         collection.duration_ms,
     )
@@ -213,16 +170,14 @@ async def collect_streaming(
     product_name: Optional[str],
     product_id: Optional[str] = None,
     site_hint: Optional[str] = None,
-    want_competitor: bool = True,
     want_videos: bool = True,
 ):
     """Gather sources concurrently, yielding each as it finishes.
 
     Same work as :func:`collect`, but as an async generator so a caller can
     forward partial results instead of waiting for the slowest source. Yields
-    ``(kind, payload)`` where kind is ``"host"``, ``"competitor"``, ``"video"``
-    or ``"done"``; the final ``"done"`` payload is the assembled
-    :class:`Collection`.
+    ``(kind, payload)`` where kind is ``"host"``, ``"video"`` or ``"done"``;
+    the final ``"done"`` payload is the assembled :class:`Collection`.
 
     Ordering is arrival order, not a fixed sequence — that is the point. The
     host site usually lands first, videos whenever their platform answers.
@@ -237,15 +192,6 @@ async def collect_streaming(
             site_hint=site_hint,
         )
     )
-    if want_competitor and (product_name or "").strip():
-        tasks["competitor"] = asyncio.create_task(
-            scrape_competitor_reviews(
-                product_name,
-                host_url=product_url,
-                host_site=site_hint,
-                product_meta={"product_id": product_id},
-            )
-        )
     if want_videos and (product_name or "").strip():
         tasks["youtube"] = asyncio.create_task(
             youtube_source.find_videos(product_name, limit=settings.video_max_results)
@@ -257,7 +203,6 @@ async def collect_streaming(
 
     timeouts = {
         "host": settings.total_timeout + 5,
-        "competitor": settings.competitor_timeout + 5,
         "youtube": settings.video_timeout + 10,
         "tiktok": settings.video_timeout + 10,
     }
@@ -294,24 +239,6 @@ async def collect_streaming(
                     result.notes.append(note)
                 collection.host = result
                 yield "host", result
-
-            elif name == "competitor":
-                if value is None:
-                    result = ScrapeResult(
-                        source="competitor", ok=False, error="competitor collection did not complete"
-                    )
-                    verdict = MatchVerdict(False, 0.0, "none", ["did not complete"], [])
-                    matched = None
-                else:
-                    result, verdict, matched = value
-                if note:
-                    result.notes.append(note)
-                collection.competitor = result
-                collection.match = verdict
-                collection.matched_product = matched
-                # Verdict travels with the result: the caller needs it to emit
-                # the match event without waiting for the whole collection.
-                yield "competitor", (result, verdict, matched)
 
             else:
                 module = youtube_source if name == "youtube" else tiktok_source

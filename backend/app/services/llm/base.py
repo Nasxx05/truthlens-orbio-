@@ -213,8 +213,8 @@ class EvidenceOutput(BaseModel):
     external_mentions: int = Field(
         0,
         description=(
-            "How many independent, non-review sources (competitor listing, video "
-            "commentary) corroborate this point. 0 if none do — do not guess."
+            "How many independent, non-review sources (video commentary) "
+            "corroborate this point. 0 if none do — do not guess."
         ),
     )
     claim_text: Optional[str] = Field(

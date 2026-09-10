@@ -2,12 +2,11 @@
 
 FastAPI service behind the TrustLens extension. The `/analyze` endpoint accepts
 the product the extension detected (or the shopper typed), then collects from
-four independent sources concurrently:
+three independent sources concurrently:
 
 | Source | What it provides |
 |---|---|
 | Host site | Reviews from the site the shopper is buying from |
-| Competitor site | Reviews for the same product on a different platform, for cross-platform comparison |
 | YouTube | Review videos via the official Data API v3 |
 | TikTok | Review videos via scraping |
 
@@ -127,7 +126,6 @@ Each frame is `data: {…}\n\n` with the event name inside the JSON:
 | `started` | Immediately | The stages to expect |
 | `source` | A review source finished | Its report (counts only — reviews follow filtering) |
 | `videos` | A video platform finished | That platform's videos |
-| `match` | Competitor matched or rejected | The match verdict |
 | `reviews` | Every review source reported | All reviews, annotated with filtering verdicts |
 | `summary` | The LLM returned | Pros / cons / verdict |
 | `done` | Everything finished | Final status, totals, timing |
@@ -240,28 +238,6 @@ being accepted and silently scraping nothing in a later phase.
 It is empty (`verdict: ""`) when summarization could not run — no provider
 configured, no surviving reviews, or an API failure. `llm.error` says which.
 
-#### `product_match`
-
-Present whenever a competitor was attempted. Competitor reviews are included
-**only** when the match clears `MATCH_THRESHOLD`:
-
-```json
-{
-  "matched": true,
-  "score": 0.937,
-  "confidence": "high",
-  "reasons": ["model token match: wh1000xm5", "descriptive overlap 0.67: ..."],
-  "conflicts": [],
-  "matched_title": "Sony WH-1000XM5 Wireless Noise Cancelling Over-Ear Headphones, Black",
-  "matched_url": "https://...",
-  "matched_site": "newegg"
-}
-```
-
-When nothing matches confidently the competitor source is **omitted** and
-`conflicts` says why. Reviews of a near-miss product read as evidence about this
-one, so guessing is worse than having no competitor data.
-
 #### `contributed`
 
 Which sources actually returned data, so the popup can say what a verdict rests
@@ -272,10 +248,7 @@ on rather than implying full coverage.
 | `status` | Meaning |
 |---|---|
 | `ok` | At least `REVIEW_MIN` reviews were found |
-| `not_enough_data` | Fewer than `REVIEW_MIN` found **across all sources**. `reviews` still carries whatever was scraped, and `message` explains why it is thin — no verdict should be inferred from it |
-
-The floor applies to the merged count, so a competitor with reviews can carry a
-product whose host site is blocking the scrape.
+| `not_enough_data` | Fewer than `REVIEW_MIN` found. `reviews` still carries whatever was scraped, and `message` explains why it is thin — no verdict should be inferred from it |
 
 #### `filter` (per review)
 
@@ -526,27 +499,6 @@ every decision inspectable: a review is flagged because of specific words and
 measurements that can be printed in the report, not because a black box scored
 it. It also runs inline on 200 reviews without a model download.
 
-## Product matching
-
-`app/services/matching.py` decides whether a competitor listing is the same
-product. It combines four signals:
-
-| Signal | Weight |
-|---|---|
-| Shared identifier (UPC/EAN/MPN/SKU) | Decisive — scores 1.0 immediately |
-| Shared model token (`WH-1000XM5`, compared with separators removed) | Dominant when present |
-| Brand agreement | Contributing; a declared mismatch is a rejection |
-| Descriptive token overlap (Dice coefficient) | Carries the decision when no model number exists |
-
-**Conflicts veto a match outright, whatever the score.** These are the cases a
-similarity measure gets confidently wrong, because the titles are nearly
-identical:
-
-- Different capacity or size — `iPhone 13 128GB` vs `256GB`, `Watch 45mm` vs `41mm`, `55"` vs `65"` TV
-- Neighbouring generation — `WH-1000XM5` vs `WH-1000XM4`
-- Accessories for the product — `Carrying Case for Sony WH-1000XM5`, `Replacement Ear Pads`
-- Different brand
-
 ## Video discovery
 
 **YouTube** uses the official Data API v3, not scraping — YouTube's robots.txt
@@ -577,17 +529,14 @@ dropped.
 
 ## Concurrency
 
-All four sources run at once (`app/services/aggregate.py`), each with its own
+All sources run at once (`app/services/aggregate.py`), each with its own
 timeout, gathered with exceptions captured. Two consequences:
 
-- **A slow source cannot delay the others.** The competitor budget
-  (`COMPETITOR_TIMEOUT`) is enforced on in-flight requests, not just between
-  them, so one stalled request cannot overrun it.
+- **A slow source cannot delay the others.** Each timeout is enforced on
+  in-flight requests, not just between them, so one stalled request cannot
+  overrun it.
 - **A broken source cannot fail the request.** Anything that raises or times out
   is reported as a failed source alongside the results that succeeded.
-
-Verified: with a competitor stalling 9s per request against a 6s budget, the
-host's 150 reviews still return and the response completes in 6.1s.
 
 ## Scraping
 
@@ -678,13 +627,12 @@ backend/
 │       │   ├── extract.py        # HTML -> reviews
 │       │   ├── browser.py        # optional Playwright rendering
 │       │   ├── host.py           # host-site orchestration
-│       │   ├── competitor.py     # search -> match -> scrape a competitor
 │       │   └── sites/            # per-retailer adapters
 │       │       ├── amazon.py     #   host
 │       │       ├── generic.py    #   host fallback
-│       │       ├── newegg.py     #   host + search
-│       │       ├── bestbuy.py    #   host + search
-│       │       └── ebay.py       #   host + search
+│       │       ├── newegg.py     #   host
+│       │       ├── bestbuy.py    #   host
+│       │       └── ebay.py       #   host
 │       └── videos/
 │           ├── base.py           # normalized Video / VideoResult
 │           ├── relevance.py      # is this video about this product?

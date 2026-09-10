@@ -183,14 +183,12 @@ Full audit in [SECURITY.md](SECURITY.md). Highlights:
 | Source | Method | Notes |
 |---|---|---|
 | Host site | Scraping (HTTP, or Playwright when reviews render client-side) | The site the shopper is buying from |
-| Competitor site | Search → confidence-checked match → scrape | Omitted unless the match is confident |
 | YouTube | Official Data API v3 | Needs `YOUTUBE_API_KEY` |
 | TikTok | Scraping | Least reliable by design; fully isolated |
 
-All four run **concurrently**, each with its own timeout. A slow or broken
-source degrades its own contribution and nothing else — a competitor stalling 9s
-against a 6s budget still returns the host's reviews in 6.1s. `contributed` in
-the response names the sources that actually returned data.
+All three run **concurrently**, each with its own timeout. A slow or broken
+source degrades its own contribution and nothing else. `contributed` in the
+response names the sources that actually returned data.
 
 ## LLM summarization
 
@@ -229,21 +227,6 @@ filter that silently drops data can't be debugged.
 On a fixture product with 10 genuine and 8 planted fake reviews, all 10 genuine
 passed and all 8 fakes failed — the templated batch scoring 1.0 on three rules
 at once. See [backend/README.md](backend/README.md#fake-review-filtering).
-
-### Cross-platform matching
-
-The competitor site is only useful if it is showing the *same* product, so a
-candidate is scored before its reviews are used, and the source is **omitted**
-rather than guessed at. Conflicts reject a match outright even when titles are
-near-identical:
-
-- different capacity or size (`128GB` vs `256GB`, `45mm` vs `41mm`, `55"` vs `65"`)
-- neighbouring generation (`WH-1000XM5` vs `WH-1000XM4`)
-- accessories (`Carrying Case for …`, `Replacement Ear Pads`)
-- different brand
-
-Reviews stay attributed to their platform in the merged array rather than being
-pooled, because divergence between platforms is itself the trust signal.
 
 ## Review scraping
 

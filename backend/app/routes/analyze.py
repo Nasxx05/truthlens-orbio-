@@ -133,12 +133,9 @@ def _cached_stage_events(payload: dict) -> list:
     summary = payload.get("summary") or {}
     reviews_passed = payload.get("reviews_passed", 0)
     reviews = payload.get("reviews") or []
-    contributed = set(payload.get("contributed") or [])
     sources = payload.get("sources") or []
-    host = next((s for s in sources if s.get("source") not in (None, "competitor")), None) or {}
-    attempted_competitor = any(s.get("source") == "competitor" for s in sources) or any(
-        "competitor" in c for c in contributed
-    )
+    host = sources[0] if sources else {}
+    attempted_video = bool(payload.get("video_sources"))
     videos_present = bool(payload.get("videos"))
 
     events = [_stage("product_identification", "complete", detail="from cached analysis")]
@@ -160,10 +157,10 @@ def _cached_stage_events(payload: dict) -> list:
     events.append(
         _stage("review_reliability", "complete" if summary.get("review_risk") else "skipped")
     )
-    if not attempted_competitor and not videos_present:
-        events.append(_stage("external_research", "skipped", detail="No product name to cross-check with"))
+    if not attempted_video:
+        events.append(_stage("external_research", "skipped", detail="No product name to search video platforms with"))
     else:
-        events.append(_stage("external_research", "complete" if videos_present or attempted_competitor else "failed"))
+        events.append(_stage("external_research", "complete" if videos_present else "failed"))
     events.append(
         _stage("claim_research", "complete" if summary.get("claim_check") else "skipped")
     )
@@ -195,8 +192,6 @@ def _cached_events(payload: dict, info: CacheInfo):
         "filter_report": payload.get("filter_report"),
         "sources": payload.get("sources", []),
     }
-    if payload.get("product_match"):
-        yield {"event": "match", "product_match": payload["product_match"]}
     videos = payload.get("videos", [])
     if videos:
         yield {"event": "videos", "source": "cache", "report": {}, "videos": videos}
@@ -263,8 +258,6 @@ async def analyze(payload: AnalyzeRequest, request: Request) -> AnalyzeResponse:
                     })
                 elif name == "summary":
                     assembled.update({"summary": event["summary"], "llm": event["llm"]})
-                elif name == "match":
-                    assembled["product_match"] = event["product_match"]
                 elif name == "done":
                     assembled.update({
                         "status": event["status"], "message": event["message"],
@@ -371,8 +364,6 @@ async def analyze_streaming(payload: AnalyzeRequest, request: Request) -> Stream
                     })
                 elif name == "summary":
                     assembled.update({"summary": event["summary"], "llm": event["llm"]})
-                elif name == "match":
-                    assembled["product_match"] = event["product_match"]
                 elif name == "done":
                     assembled.update({
                         "status": event["status"], "message": event["message"],

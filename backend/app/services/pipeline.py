@@ -103,7 +103,6 @@ async def analyze_stream(
     ``started``   the pipeline is running; lists the stages to expect
     ``source``    one review source finished (report only — reviews follow filtering)
     ``videos``    one video platform finished, with its videos
-    ``match``     competitor product-match verdict
     ``reviews``   every review, annotated with its filtering verdict
     ``summary``   the LLM verdict
     ``done``      final status and totals
@@ -119,9 +118,9 @@ async def analyze_stream(
 
     # A caller that only has a URL (the common case for a pasted link) sends
     # no product_name — but a host site that blocks the scrape outright leaves
-    # nothing to search competitor sites or video platforms with. Falling
-    # back to a name guessed from the URL slug means a blocked host still
-    # produces output, instead of "not enough data" with nothing tried.
+    # nothing to search video platforms with. Falling back to a name guessed
+    # from the URL slug means a blocked host still produces output, instead
+    # of "not enough data" with nothing tried.
     if not (product_name or "").strip():
         product_name = derive_name_from_url(product_url)
 
@@ -149,14 +148,10 @@ async def analyze_stream(
     video_results = []
     host_report: Optional[dict] = None
     host_result = None
-    competitor_result = None
-    competitor_report: Optional[dict] = None
 
     # Videos are deliberately absent from this set: reviews must never be
     # gated on a video platform answering.
     expected_review_sources = {"host"}
-    if (product_name or "").strip():
-        expected_review_sources.add("competitor")
     seen_review_sources: set = set()
 
     reviews: List[dict] = []
@@ -203,8 +198,6 @@ async def analyze_stream(
         nonlocal reviews, filter_report, passed_count
 
         collected = list(host_result.reviews if host_result else [])
-        if competitor_result:
-            collected.extend(competitor_result.reviews)
         reviews = [review.to_dict() for review in collected]
         passed_count = len(reviews)
 
@@ -289,38 +282,28 @@ async def analyze_stream(
         return events
 
     def external_research_event() -> dict:
-        """Whether the competitor cross-check and/or video search turned up anything.
+        """Whether video search turned up anything.
 
         "External sources" here means the real work this service does today:
-        a second retailer carrying the same product, and video platforms —
-        not a general web search, which this service does not perform.
+        video platforms — not a general web search, which this service does
+        not perform.
         """
-        attempted_competitor = "competitor" in expected_review_sources
         attempted_video = len(video_sources) > 0
 
-        if not attempted_competitor and not attempted_video:
+        if not attempted_video:
             return _stage(
                 "external_research", "skipped",
-                detail="No product name was available to search a competitor site or video platforms.",
+                detail="No product name was available to search video platforms.",
             )
 
         parts: List[str] = []
-        if attempted_competitor:
-            if competitor_report and competitor_report.get("count"):
-                parts.append(f"{competitor_report['count']} review(s) from {competitor_report.get('source')}")
-            elif competitor_report and competitor_report.get("blocked"):
-                parts.append(f"{competitor_report.get('source')} blocked the cross-check")
-            elif competitor_report:
-                parts.append(f"{competitor_report.get('source')} carried no matching reviews")
-
         total_videos = sum((v.get("count") or 0) for v in video_sources)
         if total_videos:
             parts.append(f"{total_videos} video(s) across {len(video_sources)} platform(s)")
-        elif attempted_video:
+        else:
             parts.append("no review videos found on the platforms checked")
 
-        succeeded = bool((competitor_report and competitor_report.get("count")) or total_videos)
-        return _stage("external_research", "complete" if succeeded else "failed", detail="; ".join(parts) or None)
+        return _stage("external_research", "complete" if total_videos else "failed", detail="; ".join(parts) or None)
 
     sources_task = asyncio.create_task(pump_sources())
     summary_task = None
@@ -473,24 +456,6 @@ async def analyze_stream(
                             "product_info_collected", "complete",
                             detail="Product page reached; no image or description found",
                         )
-
-                elif source_kind == "competitor":
-                    competitor_result, verdict, matched = value
-                    report = competitor_result.to_dict()
-                    competitor_report = report
-                    review_sources.append(report)
-                    seen_review_sources.add("competitor")
-                    yield {"event": "source", "kind": "competitor", "report": report}
-                    if verdict is not None:
-                        yield {
-                            "event": "match",
-                            "product_match": {
-                                **verdict.to_dict(),
-                                "matched_title": (matched or {}).get("title"),
-                                "matched_url": (matched or {}).get("url"),
-                                "matched_site": competitor_result.source,
-                            },
-                        }
 
                 elif source_kind == "video":
                     video_sources.append(value.to_dict())

@@ -219,24 +219,6 @@ class VideoSourceReport(BaseModel):
     duration_ms: Optional[int] = None
 
 
-class ProductMatch(BaseModel):
-    """Whether the competitor listing is the same product, and why.
-
-    Competitor reviews are only included when this clears the configured
-    threshold: reviews of a near-miss product read as evidence about this one
-    and are worse than no competitor data at all.
-    """
-
-    matched: bool = False
-    score: float = 0.0
-    confidence: str = "none"
-    reasons: List[str] = Field(default_factory=list)
-    conflicts: List[str] = Field(default_factory=list)
-    matched_title: Optional[str] = None
-    matched_url: Optional[str] = None
-    matched_site: Optional[str] = None
-
-
 class FilterReportModel(BaseModel):
     """Set-level filtering summary.
 
@@ -306,9 +288,6 @@ class AnalyzeResponse(BaseModel):
     )
     video_sources: List[VideoSourceReport] = Field(
         default_factory=list, description="Per-video-platform outcome"
-    )
-    product_match: Optional[ProductMatch] = Field(
-        None, description="Competitor product match verdict, when a competitor was attempted"
     )
     contributed: List[str] = Field(
         default_factory=list, description="Sources that actually returned data"

@@ -94,7 +94,7 @@ def _claim_consistency(evidence: List[dict], claim_attempted: bool) -> Optional[
 
 
 def _external_evidence(
-    ratings_by_source: Optional[Dict[str, float]], video_count: int, competitor_present: bool
+    ratings_by_source: Optional[Dict[str, float]], video_count: int
 ) -> Optional[float]:
     rated = {source: value for source, value in (ratings_by_source or {}).items() if value}
     consistency = None
@@ -102,7 +102,7 @@ def _external_evidence(
         spread = max(rated.values()) - min(rated.values())
         consistency = _clamp(100 - spread * 40)
 
-    corroboration_count = (video_count or 0) + (1 if competitor_present else 0)
+    corroboration_count = video_count or 0
     corroboration = _clamp(min(100, corroboration_count * 25)) if corroboration_count > 0 else None
 
     parts = [value for value in (consistency, corroboration) if value is not None]
@@ -191,7 +191,6 @@ def compute_score_breakdown(
     evidence: List[dict],
     ratings_by_source: Optional[Dict[str, float]] = None,
     video_count: int = 0,
-    competitor_present: bool = False,
     source_count: int = 0,
     claim_attempted: bool = False,
 ) -> dict:
@@ -207,7 +206,7 @@ def compute_score_breakdown(
     customer_experience = _customer_experience(reviews)
     review_reliability = _review_reliability(review_risk or {})
     recurring_complaints = _recurring_complaints(evidence, review_count)
-    external_evidence = _external_evidence(ratings_by_source, video_count, competitor_present)
+    external_evidence = _external_evidence(ratings_by_source, video_count)
     claim_consistency = _claim_consistency(evidence, claim_attempted)
     evidence_confidence = _evidence_confidence(review_count, source_count)
 
@@ -230,7 +229,7 @@ def compute_score_breakdown(
         {
             "key": "external_evidence", "label": "External evidence",
             "value": external_evidence, "weight": settings.score_weight_external_evidence,
-            "note": _note(external_evidence, "Cross-platform ratings and video/competitor corroboration"),
+            "note": _note(external_evidence, "Cross-platform ratings and video corroboration"),
         },
         {
             "key": "claim_consistency", "label": "Claim consistency",

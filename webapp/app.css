@@ -351,24 +351,6 @@ h1 {
 .rail__step[data-state="skipped"] { opacity: 0.6; }
 .rail__step[data-state="skipped"] .rail__icon { opacity: 0.5; }
 
-/* A small non-blocking notice shown when a verdict was produced but a real
-   source failed along the way — never covers up the results themselves. */
-.partial-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0 24px 14px;
-  padding: 10px 12px;
-  background: var(--warn-bg, rgba(230, 162, 60, 0.12));
-  border: 1px solid var(--warn-fg, #e6a23c);
-  border-radius: 8px;
-  color: var(--fg);
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-.partial-banner__icon { flex: 0 0 auto; }
-.partial-banner__body strong { display: block; margin-bottom: 2px; }
-
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
@@ -989,7 +971,6 @@ h1 {
   .rail__list { grid-template-columns: 1fr; }
   .rail__label, .rail__detail { white-space: normal; overflow: visible; text-overflow: unset; }
   .hero { flex-wrap: wrap; }
-  .partial-banner { margin: 0 12px 14px; }
 }
 
 /* ------------------------------------------------------------------ footer */

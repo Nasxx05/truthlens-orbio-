@@ -24,8 +24,8 @@ ADAPTERS = [
     GenericAdapter(),
 ]
 
-# Adapters that can search their own site for an equivalent product, which is
-# what a competitor source needs. Keyed by name for configuration.
+# Adapters that can search their own site for an equivalent product. Keyed by
+# name for configuration.
 SEARCH_ADAPTERS = {
     adapter.name: adapter
     for adapter in ADAPTERS
@@ -44,16 +44,10 @@ def adapter_for(url: str, site_hint: Optional[str] = None):
     return ADAPTERS[-1]
 
 
-def search_adapter(name: str):
-    """A competitor adapter by configured name, or ``None`` if unknown."""
-    return SEARCH_ADAPTERS.get((name or "").strip().lower())
-
-
 __all__: List[str] = [
     "ADAPTERS",
     "SEARCH_ADAPTERS",
     "adapter_for",
-    "search_adapter",
     "AmazonAdapter",
     "BestBuyAdapter",
     "EbayAdapter",
